@@ -1,0 +1,10 @@
+*~
+*.[ao]
+*.l[ao]
+
+# Files related to O'Caml projects.
+*.cm[ioxa]
+*.cmxa
+*.omc
+*.omakedb*
+*.run
