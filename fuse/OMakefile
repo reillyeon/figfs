@@ -1,0 +1,47 @@
+BYTE_ENABLED = true
+NATIVE_ENABLED = true
+
+CFLAGS += -fPIC -D_FILE_OFFSET_BITS=64 -pthread -I.
+OCAMLFLAGS += -thread
+
+GENERATED_FILES[] =
+	Fuse_bindings_stubs.c
+	Fuse_bindings.ml
+	Fuse_bindings.mli
+	Fuse_bindings.h
+
+C_OBJECTS =	Fuse_bindings_stubs.o Fuse_util.o Unix_util_stubs.o
+
+OCAML_OBJECTS[] =
+	Fuse_bindings
+	Result
+	Fuse_lib
+	Fuse
+	Unix_util
+
+OCAML_BYTE_OBJECTS = $(addsuffix .cmo, $(OCAML_OBJECTS))
+OCAML_NATIVE_OBJECTS = $(addsuffix .cmx, $(OCAML_OBJECTS))
+OCAML_CODE_OBJECTS = $(addsuffix .o, $(OCAML_OBJECTS))
+OCAML_INTERFACES = $(addsuffix .cmi, $(OCAML_OBJECTS))
+
+.DEFAULT: Fuse.cma Fuse.cmxa
+
+$(GENERATED_FILES): Fuse_bindings.idl
+	camlidl -header $<
+
+libFuse_stubs.a: $(C_OBJECTS)
+	ar rcs $@ $<
+
+dllFuse_stubs.so: $(C_OBJECTS)
+	gcc -o $@ -shared $(C_OBJECTS) -lfuse
+
+Fuse.cmxa: $(OCAML_NATIVE_OBJECTS) libFuse_stubs.a
+	ocamlopt -a -thread -linkall -cclib -lFuse_stubs -cclib -lfuse -cclib -lcamlidl -o $@ $<
+
+Fuse.cma: $(OCAML_BYTE_OBJECTS) dllFuse_stubs.so
+	ocamlc -a -thread -dllib dllFuse_stubs.so -custom -linkall bigarray.cma -cclib -lFuse_stubs -cclib -lfuse -cclib -lcamlidl -o $@ $<
+
+clean:
+	rm -f $(GENERATED_FILES) $(C_OBJECTS) $(OCAML_NATIVE_OBJECTS) \
+		$(OCAML_BYTE_OBJECTS) $(OCAML_CODE_OBJECTS) $(OCAML_INTERFACES) \
+		libFuse_stubs.a dllFuse_stubs.so Fuse.cma Fuse.cmxa Fuse.a

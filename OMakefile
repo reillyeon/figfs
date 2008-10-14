@@ -31,7 +31,7 @@
 # If so, define the subdirectory targets and uncomment this section.
 #
 
-.SUBDIRS: zlib
+.SUBDIRS: zlib fuse
 
 ########################################################################
 # C configuration.
