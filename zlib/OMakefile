@@ -3,7 +3,7 @@ NATIVE_ENABLED = true
 
 CFLAGS += -fPIC
 
-C_OBJECTS =	zlibstub.o
+C_OBJECTS = zlibstub.o
 
 OCAML_OBJECTS =	zlib
 
@@ -26,12 +26,11 @@ zlib.cmxa zlib.a: $(OCAML_NATIVE_OBJECTS) libzlibstub.a
 zlib.cma: $(OCAML_BYTE_OBJECTS) dllzlibstub.so
 	ocamlc -a -thread -dllib dllzlibstub.so -custom -linkall -cclib -lzlibstub -cclib -lz -o $@ $<
 
+FILES = zlib zlibstub zlib_test
+
 clean:
-	rm -f $(C_OBJECTS) $(OCAML_NATIVE_OBJECTS) \
-		$(OCAML_BYTE_OBJECTS) $(OCAML_CODE_OBJECTS) $(OCAML_INTERFACES) \
-		libzlibstub.a dllzlibstub.so zlib.cma zlib.cmxa zlib.a \
-		zlib_test.cmi zlib_test.cmo zlib_test.o zlib_test \
-		zlib_test.opt zlib_test.run
+	rm -f dllzlibstub.so libzlibstub.a zlib_test
+	rm -f $(filter-proper-targets $(glob $(addsuffix .*, $(FILES))))
 
 USE_OCAMLFIND = true
 
@@ -42,8 +41,11 @@ OCAMLPACKS[] =
 OCAML_LIBS[] =
    zlib
 
-.DEFAULT: zlib.cma zlib.cmxa \
-          $(OCamlProgram zlib_test, zlib_test)
+OCamlProgram(zlib_test, zlib_test)
 
-test:
-   ./zlib_test.opt
+.DEFAULT: $(if $(BYTE_ENABLED), zlib.cma) \
+	      $(if $(NATIVE_ENABLED), zlib.cmxa) \
+          zlib_test
+
+test: zlib_test
+   ./zlib_test

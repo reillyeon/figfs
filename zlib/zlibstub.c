@@ -38,8 +38,19 @@ caml_inflate(value input, value limit)
     stream.avail_out = out_buf_len;
 
     inflateInit(&stream);
+    if (stream.msg != NULL) {
+        caml_failwith(stream.msg);
+    }
+
     inflate(&stream, Z_FINISH);
+    if (stream.msg != NULL) {
+        caml_failwith(stream.msg);
+    }
+
     inflateEnd(&stream);
+    if (stream.msg != NULL) {
+        caml_failwith(stream.msg);
+    }
 
     CAMLreturn(output);
 }
