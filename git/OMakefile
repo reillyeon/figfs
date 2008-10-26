@@ -1,0 +1,34 @@
+.PHONY: all clean test
+
+NATIVE_ENABLED = true
+BYTE_ENABLED = true
+
+OCAMLINCLUDES += ../zlib
+OCAML_LIBS += ../zlib/zlib
+
+FILES[] =
+	sha1file
+	repository
+	hash
+	object
+
+LIB = git
+
+OCamlLibrary($(LIB), $(FILES))
+
+OCAML_LIBS += git
+
+OCamlProgram(cat-file, cat-file)
+
+.DEFAULT: $(if $(BYTE_ENABLED), git.cma) \
+	      $(if $(NATIVE_ENABLED), git.cmxa) \
+          cat-file
+
+all: .DEFAULT
+
+clean:
+	rm -f git.cma git.a git.cmxa
+	rm -f $(filter-proper-targets $(glob $(addsuffix .*, $(FILES))))
+	rm -f cat-file cat-file.opt cat-file.run
+	rm -f $(filter-proper-targets $(glob $(addsuffix .*, cat-file)))
+

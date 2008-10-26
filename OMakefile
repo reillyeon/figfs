@@ -23,7 +23,7 @@
 # Phony targets are scoped, so you probably want to declare them first.
 #
 
-.PHONY: all install clean
+.PHONY: all clean test
 
 ########################################################################
 # Subdirectories.
@@ -31,7 +31,7 @@
 # If so, define the subdirectory targets and uncomment this section.
 #
 
-.SUBDIRS: zlib fuse
+.SUBDIRS: zlib fuse git
 
 ########################################################################
 # C configuration.
