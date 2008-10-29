@@ -18,17 +18,30 @@ OCamlLibrary($(LIB), $(FILES))
 
 OCAML_LIBS += git
 
+USE_OCAMLFIND = true
+
+OCAMLPACKS[] =
+   unix
+   oUnit
+
 OCamlProgram(cat-file, cat-file)
+OCamlProgram(git_test, git_test)
 
 .DEFAULT: $(if $(BYTE_ENABLED), git.cma) \
 	      $(if $(NATIVE_ENABLED), git.cmxa) \
-          cat-file
+          cat-file \
+          git_test
 
 all: .DEFAULT
+
+test: git_test
+	./git_test
 
 clean:
 	rm -f git.cma git.a git.cmxa
 	rm -f $(filter-proper-targets $(glob $(addsuffix .*, $(FILES))))
 	rm -f cat-file cat-file.opt cat-file.run
 	rm -f $(filter-proper-targets $(glob $(addsuffix .*, cat-file)))
+	rm -f git_test git_test.opt git_test.run
+	rm -f $(filter-proper-targets $(glob $(addsuffix .*, git_test)))
 
