@@ -14,22 +14,22 @@ OCAML_INTERFACES = $(addsuffix .cmi, $(OCAML_OBJECTS))
 
 .PHONY: all clean test
 
-libzlibstub.a: $(C_OBJECTS)
+libzlib.a: $(C_OBJECTS)
 	ar rcs $@ $<
 
-dllzlibstub.so: $(C_OBJECTS)
+dllzlib.so: $(C_OBJECTS)
 	gcc -o $@ -shared $(C_OBJECTS) -lz
 
-zlib.cmxa zlib.a: $(OCAML_NATIVE_OBJECTS) libzlibstub.a
-	ocamlopt -a -linkall -cclib -lzlibstub -cclib -lz -o $@ $<
+zlib.cmxa zlib.a: $(OCAML_NATIVE_OBJECTS) libzlib.a
+	ocamlopt -a -linkall -cclib -lzlib -cclib -lz -o $@ $<
 
-zlib.cma: $(OCAML_BYTE_OBJECTS) dllzlibstub.so
-	ocamlc -a -thread -dllib dllzlibstub.so -custom -linkall -cclib -lzlibstub -cclib -lz -o $@ $<
+zlib.cma: $(OCAML_BYTE_OBJECTS) dllzlib.so
+	ocamlc -a -thread -dllib dllzlib.so -custom -linkall -cclib -lzlib -cclib -lz -o $@ $<
 
 FILES = zlib zlibstub zlib_test
 
 clean:
-	rm -f dllzlibstub.so libzlibstub.a zlib_test
+	rm -f dllzlib.so libzlib.a zlib_test
 	rm -f $(filter-proper-targets $(glob $(addsuffix .*, $(FILES))))
 
 USE_OCAMLFIND = true

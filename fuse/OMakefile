@@ -30,21 +30,20 @@ OCAML_INTERFACES = $(addsuffix .cmi, $(OCAML_OBJECTS))
 $(GENERATED_FILES): Fuse_bindings.idl
 	camlidl -header $<
 
-libFuse_stubs.a: $(C_OBJECTS)
+libFuse.a: $(C_OBJECTS)
 	ar rcs $@ $<
 
-dllFuse_stubs.so: $(C_OBJECTS)
+dllFuse.so: $(C_OBJECTS)
 	gcc -o $@ -shared $(C_OBJECTS) -lfuse
 
-Fuse.cmxa Fuse.a: $(OCAML_NATIVE_OBJECTS) libFuse_stubs.a
-	ocamlopt -a -thread -linkall -cclib -lFuse_stubs -cclib -lfuse -cclib -lcamlidl -o $@ $<
+Fuse.cmxa Fuse.a: $(OCAML_NATIVE_OBJECTS) libFuse.a
+	ocamlopt -a -thread -linkall -cclib -lFuse -cclib -lfuse -cclib -lcamlidl -o $@ $<
 
-Fuse.cma: $(OCAML_BYTE_OBJECTS) dllFuse_stubs.so
-	ocamlc -a -thread -dllib dllFuse_stubs.so -custom -linkall bigarray.cma -cclib -lFuse_stubs -cclib -lfuse -cclib -lcamlidl -o $@ $<
+Fuse.cma: $(OCAML_BYTE_OBJECTS) dllFuse.so
+	ocamlc -a -thread -dllib dllFuse.so -custom -linkall bigarray.cma -cclib -lFuse -cclib -lfuse -cclib -lcamlidl -o $@ $<
 
 FILES = $(OCAML_OBJECTS) Fuse_bindings_stubs Fuse_util Unix_util_stubs
 
 clean:
-	rm -f dllFuse_stubs.so libFuse_stubs.a
+	rm -f dllFuse.so libFuse.a
 	rm -f $(filter-proper-targets $(glob $(addsuffix .*, $(FILES))))
-
