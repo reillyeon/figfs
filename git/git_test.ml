@@ -7,10 +7,10 @@ let sha1file_test (h:hash) (e:obj) () =
   assert_equal v e
 
 let sha1file_tree_test (h:hash) (e:(int * string * hash) list) () =
-  sha1file_test h (Tree (h, e)) ()
+  sha1file_test h (Tree { t_hash = h; t_dirents = e }) ()
 
 let sha1file_blob_test (h:hash) (e:string) () =
-  sha1file_test h (Blob (h, e)) ()
+  sha1file_test h (Blob { b_hash = h; b_data = e }) ()
 
 let sha1file_tests = "sha1file tests" >::: [
   "test1" >:: sha1file_tree_test "9154b7b094ef16273b917fda004079a8842b5d97"
