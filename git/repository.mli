@@ -1,11 +1,27 @@
-(* Git repository information *)
+(* Git repository information.
+ * Copyright (C) 2008 Reilly Grant
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+ *)
 
-(** Set the repository location used by all library components. *)
+(* Set the repository location used by all library components. *)
 val set_repo_dir : string -> unit
 
-(** Get the repository location user by all library components. *)
+(* Get the repository location user by all library components. *)
 val get_repo_dir : unit -> string
 
-(** Traverse up the filesystem tree until a repository directory is found.
+(* Traverse up the filesystem tree until a repository directory is found.
  * Returns None if the root is reached without finding a repository. *)
 val find_repo : unit -> string option
