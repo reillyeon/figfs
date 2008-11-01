@@ -1,6 +1,6 @@
 open Repository
 open Object
-open Sha1file
+open Manager
 
 let worklist : string list ref = ref []
 
@@ -9,7 +9,7 @@ let _ =
   match find_repo () with
   | Some dir ->
       set_repo_dir dir;
-      List.iter (fun f -> print_endline (string_of_obj (read_sha1_file f)))
+      List.iter (fun f -> print_endline (string_of_obj (find_object f)))
         !worklist
   | None ->
       print_endline "Not a Git repository."
