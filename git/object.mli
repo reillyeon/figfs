@@ -17,7 +17,6 @@ type commit = {
     c_parents : hash list; (* Parents of this commit. *)
     c_author : string; (* Author of this commit. *)
     c_committer : string; (* Person who made this commit. *)
-    c_date : string; (* Commit time. *)
     c_message : string (* Commit message. *)
   }
 

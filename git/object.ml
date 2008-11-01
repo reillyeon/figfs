@@ -22,7 +22,6 @@ type commit = {
     c_parents : hash list; (* Parents of this commit. *)
     c_author : string; (* Author of this commit. *)
     c_committer : string; (* Person who made this commit. *)
-    c_date : string; (* Commit time. *)
     c_message : string (* Commit message. *)
   }
 
@@ -33,9 +32,9 @@ let string_of_commit commit : string =
     | _ -> let merges = List.map (fun p -> "Merge: " ^ p) parents
            in String.concat "\n" merges in
   Printf.sprintf
-    "Commit: %s\nTree: %s\n%s\nAuthor: %s\nCommitter: %s\nDate: %s\n\n%s"
+    "Commit: %s\nTree: %s\n%s\nAuthor: %s\nCommitter: %s\n\n%s"
     commit.c_hash commit.c_tree (string_of_parents commit.c_parents)
-    commit.c_author commit.c_committer commit.c_date commit.c_message
+    commit.c_author commit.c_committer commit.c_message
 
 type dirent = int * string * hash
 
@@ -80,6 +79,31 @@ let type_of_obj : obj -> obj_type = function
   | Tree _ -> TTree
   | Blob _ -> TBlob
 
+let parse_commit (data:string) : hash * hash list * string * string * string =
+  let rec helper data tree_acc parent_acc author_acc committer_acc =
+    let newline_index = String.index data '\n' in
+    if newline_index = 0
+    then
+      let m = String.sub data 1 (String.length data - 1) in
+      match (tree_acc, parent_acc, author_acc, committer_acc) with
+      | (Some t, p, Some a, Some c) -> (t,p,a,c,m)
+      | _ -> failwith "Commit not complete."
+    else
+      let space_index = String.index data ' ' in
+      let field = String.sub data 0 space_index in
+      let value = String.sub data (space_index + 1)
+                                  (newline_index - space_index - 1) in
+      let rest = String.sub data (newline_index + 1)
+                                 (String.length data - newline_index - 1) in
+      match field with
+      | "tree" -> helper rest (Some value) parent_acc author_acc committer_acc
+      | "parent" ->
+          helper rest tree_acc (value :: parent_acc) author_acc committer_acc
+      | "author" -> helper rest tree_acc parent_acc (Some value) committer_acc
+      | "committer" -> helper rest tree_acc parent_acc author_acc (Some value)
+      | _ -> failwith ("Unknown commit property: " ^ field)
+  in helper data None [] None None
+
 let rec parse_tree (data:string) : (int * string * hash) list =
   let data_length = String.length data in
   if data_length = 0
@@ -96,13 +120,14 @@ let rec parse_tree (data:string) : (int * string * hash) list =
 
 let read_obj (h:hash) (typ:obj_type) (data:string) : obj =
   match typ with
-  | TCommit -> Commit { c_hash = h;
-                        c_tree = "";
-                        c_parents = [];
-                        c_author = "";
-                        c_committer = "";
-                        c_date = "";
-                        c_message = data }
+  | TCommit ->
+      let tree, parents, author, committer, message = parse_commit data in
+      Commit { c_hash = h;
+               c_tree = tree;
+               c_parents = parents;
+               c_author = author;
+               c_committer = committer;
+               c_message = message }
   | TTree -> Tree { t_hash = h;
                     t_dirents = parse_tree data }
   | TBlob -> Blob { b_hash = h;
