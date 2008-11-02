@@ -22,7 +22,7 @@ open Object
 let find_sha1_file (hash:hash) : string =
   let prefix = String.sub hash 0 2 in
   let suffix = String.sub hash 2 (String.length hash - 2) in
-  Printf.sprintf "%s/objects/%s/%s" (get_repo_dir ()) prefix suffix
+  List.fold_left Filename.concat (get_repo_dir ()) ["objects"; prefix; suffix]
 
 let read_sha1_file (hash:hash) : obj =
   let path = find_sha1_file hash in

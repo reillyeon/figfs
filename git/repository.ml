@@ -16,8 +16,6 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  *)
 
-open Unix
-
 let repo_dir : string option ref = ref None
 
 (* Return the repository location, or raise an exception if one hasn't been
@@ -29,26 +27,26 @@ let get_repo_dir () : string =
 
 (* Sets the repository directory. *)
 let set_repo_dir (dir:string) : unit =
-  try
-    access (dir ^ "/.git/objects") [X_OK];
-    repo_dir := Some (dir ^ "/.git")
-  with Unix_error _ ->
-    try
-      access (dir ^ "/objects") [X_OK];
-      repo_dir := Some dir
-    with Unix_error _ ->
-      failwith ("Directory " ^ dir ^ " does not appear to be a Git repository.")
+  let git_objects = List.fold_left Filename.concat dir [".git"; "objects"] in
+  if Sys.file_exists git_objects && Sys.is_directory git_objects
+  then repo_dir := Some (Filename.concat dir ".git")
+  else
+    let objects = Filename.concat dir "objects" in
+    if Sys.file_exists objects && Sys.is_directory objects
+    then repo_dir := Some dir
+    else failwith ("Does not appear to be a Git repository: " ^ dir)
 
 let find_repo () : string option =
   let rec helper dir =
-    try
-      access (dir ^ "/.git/objects") [X_OK];
-      Some dir
-    with Unix_error _ ->
-      try
-        access (dir ^ "/objects") [X_OK];
-        Some dir
-      with Unix_error _ ->
-        if dir = "/" then None
-        else helper (String.sub dir 0 (String.rindex dir '/'))
-  in helper (getcwd ())
+    let git_objects = List.fold_left Filename.concat dir [".git"; "objects"] in
+    if Sys.file_exists git_objects && Sys.is_directory git_objects
+    then Some dir
+    else
+      let objects = Filename.concat dir "objects" in
+      if Sys.file_exists objects && Sys.is_directory objects
+      then Some dir
+      else
+        let parent_dir = Filename.dirname dir in
+        if parent_dir = dir then None
+        else helper parent_dir
+  in helper (Sys.getcwd ())
