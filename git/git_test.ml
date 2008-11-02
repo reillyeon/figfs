@@ -21,6 +21,7 @@ open Object
 open Sha1file
 
 let sha1file_test (h:hash) (e:obj) () =
+  Repository.set_repo_dir "test_repo1";
   let v = read_sha1_file h in
   assert_equal v e
 
@@ -34,23 +35,30 @@ let sha1file_blob_test (h:hash) (e:string) () =
   sha1file_test h (Blob { b_hash = h; b_data = e }) ()
 
 let sha1file_tests = "sha1file tests" >::: [
-  "test1" >:: sha1file_tree_test "9154b7b094ef16273b917fda004079a8842b5d97"
-     [(0o100644, ".gitignore", "25d2f290e4894f26fbaa13b04ecdfeed20eabdb8");
-      (0o100644, "OMakefile",  "4d319aac0b9d7bf7c28600b83519f2c124fe295b");
-      (0o100644, "OMakeroot",  "35c219dacbab2809f577cc0ba9c10854e8f9fb1f");
-      (0o040000, "fuse",       "218244fc513e9d405f7947a9de956b479cb168be");
-      (0o040000, "git",        "1ed4b3daacad3febf7288009e613734035a8c6dc");
-      (0o040000, "zlib",       "2fbd671a6fff80321a57a5749da197e40bb0d4ab")];
-  "test2" >:: sha1file_blob_test "25d2f290e4894f26fbaa13b04ecdfeed20eabdb8"
-     ("*~\n*.[ao]\n*.l[ao]\n\n# Files related to O'Caml projects.\n*.cm[ioxa]" ^
-      "\n*.cmxa\n*.omc\n*.omakedb*\n*.run\n*.opt\n");
-  "test3" >:: sha1file_commit_test "fecccd93b1275f00253a3fc8987c3574991b70b4"
-     { c_hash = ""; c_tree = "43df8aaa3a17320ede5a9c50b26d05c36165ec25";
-       c_parents = ["33636eb5037bad9013897c2ec865f56b19c9cce1"];
-       c_author = "Reilly Grant <reillyeon@qotw.net> 1225424935 -0400";
-       c_committer = "Reilly Grant <reillyeon@qotw.net> 1225424935 -0400";
-       c_message = "Store object information in separate types.\n\nNew types " ^
-                   "for commit, tree, and blob.\n" }
+  "commit1" >:: sha1file_commit_test "57f9482bee1ff9e54dfd12024c041d3a8ab34ddf"
+     { c_hash = ""; c_tree = "296e56023cdc034d2735fee8c0d85a659d1b07f4";
+       c_parents = [];
+       c_author = "Reilly Grant <reillyeon@qotw.net> 1225584998 -0400";
+       c_committer = "Reilly Grant <reillyeon@qotw.net> 1225584998 -0400";
+       c_message = "Initial commit, two empty files.\n" };
+  "commit2" >:: sha1file_commit_test "96828b6633da42da034196d12af3fe4332b4b347"
+     { c_hash = ""; c_tree = "96b342b9881b0d31a6d182fcee0be26ac6187d92";
+       c_parents = ["57f9482bee1ff9e54dfd12024c041d3a8ab34ddf"];
+       c_author = "Reilly Grant <reillyeon@qotw.net> 1225585026 -0400";
+       c_committer = "Reilly Grant <reillyeon@qotw.net> 1225585026 -0400";
+       c_message = "Put data in the two files.\n" };
+  "tree1" >:: sha1file_tree_test "296e56023cdc034d2735fee8c0d85a659d1b07f4"
+     [(0o100644, "a", "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391");
+      (0o100644, "b", "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391")];
+  "tree2" >:: sha1file_tree_test "96b342b9881b0d31a6d182fcee0be26ac6187d92"
+     [(0o100644, "a", "c10c78b1d82190e1b339c6ca92a30438f3a3ba7d");
+      (0o100644, "b", "d0c4445ef1c52236f14ed9a36a97a5404727240c")];
+  "blob1" >:: sha1file_blob_test "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391"
+     "";
+  "blob2" >:: sha1file_blob_test "c10c78b1d82190e1b339c6ca92a30438f3a3ba7d"
+     "This is file a.\n";
+  "blob3" >:: sha1file_blob_test "d0c4445ef1c52236f14ed9a36a97a5404727240c"
+     "This is file b.\n"
 ]
 
 let all_tests = "all tests" >::: [
@@ -58,5 +66,4 @@ let all_tests = "all tests" >::: [
 ]
 
 let _ =
-  Repository.set_repo_dir "..";
   run_test_tt all_tests
