@@ -51,8 +51,8 @@ OCamlProgram(git_test, git_test)
 
 all: .DEFAULT
 
-test_repo1: test_repo1.tar
-	tar xf test_repo1.tar
+test_repo1: test_repo1.tar.bz2
+	tar xjf test_repo1.tar.bz2
 
 test: git_test test_repo1
 	./git_test
