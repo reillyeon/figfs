@@ -16,4 +16,8 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  *)
 
+(* Find the object with the given hash. *)
 val find_object : Object.hash -> Object.obj
+
+(* Starting with the given tree/commit, find the object at the given path. *)
+val traverse_tree : Object.hash -> string -> Object.obj

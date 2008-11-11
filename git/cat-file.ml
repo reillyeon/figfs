@@ -21,13 +21,22 @@ open Object
 open Manager
 
 let worklist : string list ref = ref []
+let commit : string option ref = ref None
 
 let _ =
-  Arg.parse [] (fun f -> worklist := f :: !worklist) "cat-file";
+  Arg.parse
+    [("-t", Arg.String (fun s -> commit := Some s),
+      "Lookup files under a tree.")]
+    (fun f -> worklist := f :: !worklist) "cat-file";
   match find_repo () with
-  | Some dir ->
-      set_repo_dir dir;
-      List.iter (fun f -> print_endline (string_of_obj (find_object f)))
-        !worklist
+  | Some dir -> (
+    set_repo_dir dir;
+    let find_func =
+      match !commit with
+      | Some c -> fun f -> traverse_tree c f
+      | None -> fun f -> find_object f
+    in List.iter (fun f -> print_endline (string_of_obj (find_func f)))
+      !worklist
+  )
   | None ->
       print_endline "Not a Git repository."

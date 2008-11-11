@@ -28,6 +28,7 @@ FILES[] =
 	hash
 	object
 	manager
+	util
 
 LIB = git
 

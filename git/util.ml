@@ -1,4 +1,4 @@
-(* Object manager.
+(* Utility functions.
  * Copyright (C) 2008 Reilly Grant
  *
  * This program is free software; you can redistribute it and/or modify
@@ -16,28 +16,26 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  *)
 
-open Repository
-open Object
-open Sha1file
+let split (s:string) (d:char) : string list =
+  let acc = ref [] in
+  let start = ref 0 in
+  let len = ref 0 in
+  String.iter (fun c ->
+    if c = d
+    then (
+      if !len != 0 then acc := String.sub s !start !len :: !acc else ();
+      start := !start + !len + 1;
+      len := 0
+     )
+    else (
+      len := !len + 1
+     )
+  ) s;
+  let result =
+    if !len <> 0
+    then String.sub s !start !len :: !acc
+    else !acc
+  in List.rev result
 
-let find_object (h:hash) : obj =
-  let sha1file_path = find_sha1_file h in
-  if Sys.file_exists sha1file_path
-  then read_sha1_file h
-  else raise Not_found
-
-let traverse_tree (h:hash) (path:string) : obj =
-  let rec helper h path =
-    match path with
-    | item :: rest -> (
-      let objekt = find_object h in
-      match objekt with
-      | Commit c -> helper c.c_tree path
-      | Tree t ->
-        let (_,_,hash) =
-          List.find (fun (_,name,_) -> name = item) t.t_dirents in
-        helper hash rest
-      | Blob b -> raise Not_found
-    )
-    | [] -> find_object h
-  in helper h (Util.split path '/')
+let unwords (s:string) : string list =
+  split s ' '
