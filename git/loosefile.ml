@@ -1,4 +1,4 @@
-(* SHA-1 object file reader.
+(* Loose object file reader.
  * Copyright (C) 2008 Reilly Grant
  *
  * This program is free software; you can redistribute it and/or modify
@@ -19,13 +19,13 @@
 open Repository
 open Object
 
-let find_sha1_file (hash:hash) : string =
+let find_loose_file (hash:hash) : string =
   let prefix = String.sub hash 0 2 in
   let suffix = String.sub hash 2 (String.length hash - 2) in
   List.fold_left Filename.concat (get_repo_dir ()) ["objects"; prefix; suffix]
 
-let read_sha1_file (hash:hash) : obj =
-  let path = find_sha1_file hash in
+let read_loose_file (hash:hash) : obj =
+  let path = find_loose_file hash in
   let file = open_in_bin path in
   let file_size = in_channel_length file in
   let buf = String.create file_size in

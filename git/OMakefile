@@ -23,12 +23,13 @@ OCAMLINCLUDES += ../zlib
 OCAML_LIBS += ../zlib/zlib
 
 FILES[] =
-	sha1file
+	loosefile
 	repository
 	hash
 	object
 	manager
 	util
+	cache
 
 LIB = git
 

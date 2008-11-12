@@ -1,4 +1,4 @@
-(* Git object database unpacked files.
+(* Data caching.
  * Copyright (C) 2008 Reilly Grant
  *
  * This program is free software; you can redistribute it and/or modify
@@ -16,6 +16,13 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  *)
 
-val find_sha1_file : Object.hash -> string
+open Repository
+open Object
 
-val read_sha1_file : Object.hash -> Object.obj
+let object_cache : (hash, obj) Hashtbl.t = Hashtbl.create 8
+
+let find_cached_object (h:hash) : obj =
+  Hashtbl.find object_cache h
+
+let cache_object (o:obj) : unit =
+  Hashtbl.add object_cache (hash_of_obj o) o

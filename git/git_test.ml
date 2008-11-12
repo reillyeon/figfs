@@ -88,24 +88,24 @@ let blob5 = Blob {
 
 (* Loose object test files. *)
 
-let sha1file_test (e:obj) () =
+let loosefile_test (e:obj) () =
   Repository.set_repo_dir "test_repo1";
-  let v = Sha1file.read_sha1_file (hash_of_obj e) in
+  let v = Loosefile.read_loose_file (hash_of_obj e) in
   assert_equal v e
 
-let sha1file_tests = "sha1file tests" >::: [
-  "commit1" >:: sha1file_test commit1;
-  "commit2" >:: sha1file_test commit2;
-  "commit3" >:: sha1file_test commit3;
-  "tree1" >:: sha1file_test tree1;
-  "tree2" >:: sha1file_test tree2;
-  "tree3" >:: sha1file_test tree3;
-  "tree4" >:: sha1file_test tree4;
-  "blob1" >:: sha1file_test blob1;
-  "blob2" >:: sha1file_test blob2;
-  "blob3" >:: sha1file_test blob3;
-  "blob4" >:: sha1file_test blob4;
-  "blob5" >:: sha1file_test blob5
+let loosefile_tests = "loosefile tests" >::: [
+  "commit1" >:: loosefile_test commit1;
+  "commit2" >:: loosefile_test commit2;
+  "commit3" >:: loosefile_test commit3;
+  "tree1" >:: loosefile_test tree1;
+  "tree2" >:: loosefile_test tree2;
+  "tree3" >:: loosefile_test tree3;
+  "tree4" >:: loosefile_test tree4;
+  "blob1" >:: loosefile_test blob1;
+  "blob2" >:: loosefile_test blob2;
+  "blob3" >:: loosefile_test blob3;
+  "blob4" >:: loosefile_test blob4;
+  "blob5" >:: loosefile_test blob5
 ]
 
 (* Tree traversal tests. *)
@@ -133,7 +133,7 @@ let tree_traverse_tests = "tree traversal tests" >::: [
 ]
 
 let all_tests = "all tests" >::: [
-  sha1file_tests;
+  loosefile_tests;
   tree_traverse_tests
 ]
 
