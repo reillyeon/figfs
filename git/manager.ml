@@ -43,7 +43,7 @@ let stat_object (h:hash) : obj_stat =
     cache_stat stat;
     stat
 
-let traverse_tree (h:hash) (path:string) : hash =
+let traverse_tree (h:hash) (path:string) : obj =
   let rec helper h path =
     match path with
     | item :: rest -> (
@@ -56,5 +56,9 @@ let traverse_tree (h:hash) (path:string) : hash =
         helper hash rest
       | Blob b -> raise Not_found
     )
-    | [] -> h
+    | [] -> (
+      match find_object h with
+      | Commit c -> helper c.c_tree path
+      | o -> o
+    )
   in helper h (Util.split path '/')

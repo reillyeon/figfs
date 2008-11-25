@@ -112,7 +112,7 @@ let loosefile_tests = "loosefile tests" >::: [
 
 let tree_traverse_test (c:hash) (p:string) (e:obj) () =
   Repository.set_repo_dir "test_repo1";
-  let v = Manager.find_object (Manager.traverse_tree c p) in
+  let v = Manager.traverse_tree c p in
   assert_equal v e
 
 let tree_traverse_fail_test (c:hash) (p:string) () =
@@ -120,16 +120,17 @@ let tree_traverse_fail_test (c:hash) (p:string) () =
   assert_raises Not_found (fun _ -> Manager.traverse_tree c p)
 
 let tree_traverse_tests = "tree traversal tests" >::: [
-  "blob1a" >:: tree_traverse_test (hash_of_obj commit1) "a" blob1;
-  "blob1b" >:: tree_traverse_test (hash_of_obj commit1) "b" blob1;
-  "blob2" >:: tree_traverse_test (hash_of_obj commit2) "a" blob2;
-  "blob3" >:: tree_traverse_test (hash_of_obj commit2) "b" blob3;
-  "tree4" >:: tree_traverse_test (hash_of_obj commit3) "c" tree4;
-  "blob4" >:: tree_traverse_test (hash_of_obj commit3) "c/d" blob4;
-  "blob5" >:: tree_traverse_test (hash_of_obj commit3) "c/e" blob5;
-  "fail1" >:: tree_traverse_fail_test (hash_of_obj commit3) "d";
-  "fail2" >:: tree_traverse_fail_test (hash_of_obj commit3) "c/d/f";
-  "fail3" >:: tree_traverse_fail_test (hash_of_obj commit3) "e/f"
+  "tree1" >:: tree_traverse_test (hash_of_obj commit1) "/" tree1;
+  "blob1a" >:: tree_traverse_test (hash_of_obj commit1) "/a" blob1;
+  "blob1b" >:: tree_traverse_test (hash_of_obj commit1) "/b" blob1;
+  "blob2" >:: tree_traverse_test (hash_of_obj commit2) "/a" blob2;
+  "blob3" >:: tree_traverse_test (hash_of_obj commit2) "/b" blob3;
+  "tree4" >:: tree_traverse_test (hash_of_obj commit3) "/c" tree4;
+  "blob4" >:: tree_traverse_test (hash_of_obj commit3) "/c/d" blob4;
+  "blob5" >:: tree_traverse_test (hash_of_obj commit3) "/c/e" blob5;
+  "fail1" >:: tree_traverse_fail_test (hash_of_obj commit3) "/d";
+  "fail2" >:: tree_traverse_fail_test (hash_of_obj commit3) "/c/d/f";
+  "fail3" >:: tree_traverse_fail_test (hash_of_obj commit3) "/e/f"
 ]
 
 let all_tests = "all tests" >::: [

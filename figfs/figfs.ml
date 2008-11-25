@@ -34,9 +34,9 @@ let base_stat = {
   st_gid = Unix.getgid ();
   st_rdev = 0;
   st_size = 0L;
-  st_atime = 0.0;
-  st_mtime = 0.0;
-  st_ctime = 0.0
+  st_atime = Unix.time ();
+  st_mtime = Unix.time ();
+  st_ctime = Unix.time ()
 }
 
 let figfs_getattr (path:string) : Unix.LargeFile.stats =
@@ -45,9 +45,8 @@ let figfs_getattr (path:string) : Unix.LargeFile.stats =
          st_kind = Unix.S_DIR;
          st_perm = 0o755 }
   else try (
-    let dir_hash = traverse_tree !root_commit (Filename.dirname path) in
-    let dir_obj = find_object dir_hash in
-    match dir_obj with
+    let dir = traverse_tree !root_commit (Filename.dirname path) in
+    match dir with
     | Tree t ->
       let (perms,_,file_hash) =
         List.find (fun (_,n,_) -> n = (Filename.basename path)) t.t_dirents in
@@ -66,7 +65,7 @@ let figfs_getattr (path:string) : Unix.LargeFile.stats =
 
 let figfs_readdir (path:string) (fd:int) : string list =
   try
-    let dir = find_object (traverse_tree !root_commit path) in
+    let dir = traverse_tree !root_commit path in
     match dir with
     | Tree t -> List.map (fun (_,n,_) -> n) t.t_dirents
     | _ -> raise (Unix.Unix_error (Unix.ENOTDIR, "readdir", path))
@@ -84,7 +83,7 @@ let string_to_buffer_blit (s:string) (b:Fuse.buffer) : int =
 let figfs_read (path:string) (buf:Fuse.buffer) (off:int64) (fd:int) : int =
   let offset = Int64.to_int off in
   try
-    let file = find_object (traverse_tree !root_commit path) in
+    let file = traverse_tree !root_commit path in
     match file with
     | Blob b ->
       if offset >= (String.length b.b_data)
@@ -106,8 +105,8 @@ let operations : Fuse.operations = {
 }
 
 let _ =
-  (match find_repo () with
-  | Some repo -> set_repo_dir repo
-  | None -> print_endline "Not a git repository."; exit 1);
-  root_commit := Sys.argv.(1);
-  Fuse.main (Array.sub Sys.argv 1 (Array.length Sys.argv - 1)) operations
+  set_repo_dir Sys.argv.(1);
+  root_commit := Sys.argv.(2);
+  let args = Array.copy Sys.argv in
+  Array.blit args 3 args 1 (Array.length args - 3);
+  Fuse.main (Array.sub args 0 (Array.length args - 2)) operations
