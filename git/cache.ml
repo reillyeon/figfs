@@ -16,13 +16,20 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  *)
 
-open Repository
 open Object
 
 let object_cache : (hash, obj) Hashtbl.t = Hashtbl.create 8
+
+let stat_cache : (hash, obj_stat) Hashtbl.t = Hashtbl.create 8
 
 let find_cached_object (h:hash) : obj =
   Hashtbl.find object_cache h
 
 let cache_object (o:obj) : unit =
   Hashtbl.add object_cache (hash_of_obj o) o
+
+let find_cached_stat (h:hash) : obj_stat =
+  Hashtbl.find stat_cache h
+
+let cache_stat (os:obj_stat) : unit =
+  Hashtbl.add stat_cache os.os_hash os

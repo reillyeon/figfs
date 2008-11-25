@@ -31,9 +31,7 @@ FILES[] =
 	util
 	cache
 
-LIB = git
-
-OCamlLibrary($(LIB), $(FILES))
+OCamlLibrary(git, $(FILES))
 
 OCAML_LIBS += git
 

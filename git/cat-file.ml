@@ -33,7 +33,7 @@ let _ =
     set_repo_dir dir;
     let find_func =
       match !commit with
-      | Some c -> fun f -> traverse_tree c f
+      | Some c -> fun f -> find_object (traverse_tree c f)
       | None -> fun f -> find_object f
     in List.iter (fun f -> print_endline (string_of_obj (find_func f)))
       !worklist

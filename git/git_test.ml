@@ -112,7 +112,7 @@ let loosefile_tests = "loosefile tests" >::: [
 
 let tree_traverse_test (c:hash) (p:string) (e:obj) () =
   Repository.set_repo_dir "test_repo1";
-  let v = Manager.traverse_tree c p in
+  let v = Manager.find_object (Manager.traverse_tree c p) in
   assert_equal v e
 
 let tree_traverse_fail_test (c:hash) (p:string) () =

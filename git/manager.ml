@@ -25,14 +25,25 @@ let find_object (h:hash) : obj =
   try find_cached_object h
   with Not_found ->
     let objekt =
-      let sha1file_path = find_loose_file h in
-      if Sys.file_exists sha1file_path
+      let loosefile_path = find_loose_file h in
+      if Sys.file_exists loosefile_path
       then read_loose_file h
       else raise Not_found in
     cache_object objekt;
     objekt
 
-let traverse_tree (h:hash) (path:string) : obj =
+let stat_object (h:hash) : obj_stat =
+  try find_cached_stat h
+  with Not_found ->
+    let stat =
+      let loosefile_path = find_loose_file h in
+      if Sys.file_exists loosefile_path
+      then stat_loose_file h
+      else raise Not_found in
+    cache_stat stat;
+    stat
+
+let traverse_tree (h:hash) (path:string) : hash =
   let rec helper h path =
     match path with
     | item :: rest -> (
@@ -45,5 +56,5 @@ let traverse_tree (h:hash) (path:string) : obj =
         helper hash rest
       | Blob b -> raise Not_found
     )
-    | [] -> find_object h
+    | [] -> h
   in helper h (Util.split path '/')

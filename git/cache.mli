@@ -19,3 +19,7 @@
 val find_cached_object : Object.hash -> Object.obj
 
 val cache_object : Object.obj -> unit
+
+val find_cached_stat : Object.hash -> Object.obj_stat
+
+val cache_stat : Object.obj_stat -> unit

@@ -18,4 +18,6 @@
 
 val find_loose_file : Object.hash -> string
 
+val stat_loose_file : Object.hash -> Object.obj_stat
+
 val read_loose_file : Object.hash -> Object.obj

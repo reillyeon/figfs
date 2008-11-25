@@ -14,6 +14,31 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
-.PHONY: all clean test
+.PHONY: all clean
 
-.SUBDIRS: zlib fuse git figfs
+NATIVE_ENABLED = true
+BYTE_ENABLED = true
+
+OCAMLINCLUDES += ../zlib ../git ../fuse
+OCAML_LIBS += ../zlib/zlib ../git/git ../fuse/Fuse
+OCAMLFLAGS += -thread
+
+FILES[] =
+	figfs
+
+USE_OCAMLFIND = true
+
+OCAMLPACKS[] =
+	unix
+	threads
+	bigarray
+
+OCamlProgram(figfs, $(FILES))
+
+.DEFAULT: figfs
+
+all: .DEFAULT
+
+clean:
+	rm -f figfs figfs.run figfs.opt
+	rm -f $(filter-proper-targets $(glob $(addsuffix .*, $(FILES))))

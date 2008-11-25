@@ -34,6 +34,12 @@ let obj_type_of_string : string -> obj_type = function
   | "blob" -> TBlob
   | t -> failwith (Printf.sprintf "Unknown object type '%s'." t)
 
+type obj_stat = {
+    os_hash : hash; (* Object hash. *)
+    os_type : obj_type; (* Object type. *)
+    os_size : int (* Object size. *)
+  }
+
 type commit = {
     c_hash : hash; (* Hash of this commit. *)
     c_tree : hash; (* Tree for this commit. *)

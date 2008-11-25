@@ -24,7 +24,7 @@ let find_loose_file (hash:hash) : string =
   let suffix = String.sub hash 2 (String.length hash - 2) in
   List.fold_left Filename.concat (get_repo_dir ()) ["objects"; prefix; suffix]
 
-let read_loose_file (hash:hash) : obj =
+let internal_read_loose_file (hash:hash) : obj_stat * string =
   let path = find_loose_file hash in
   let file = open_in_bin path in
   let file_size = in_channel_length file in
@@ -38,4 +38,12 @@ let read_loose_file (hash:hash) : obj =
                               (null_index - space_index - 1)) in
   let inflated_data = Zlib.inflate buf (size + null_index + 1) in
   let data = String.sub inflated_data (null_index + 1) size in
-  read_obj hash typ data
+  ( { os_hash = hash; os_type = typ; os_size = size }, data )
+
+let stat_loose_file (hash:hash) : obj_stat =
+  let stat, _ = internal_read_loose_file hash in
+  stat
+
+let read_loose_file (hash:hash) : obj =
+  let stat, data = internal_read_loose_file hash in
+  read_obj hash stat.os_type data

@@ -19,5 +19,8 @@
 (* Find the object with the given hash. *)
 val find_object : Object.hash -> Object.obj
 
+(* Find information on the object with the given hash. *)
+val stat_object : Object.hash -> Object.obj_stat
+
 (* Starting with the given tree/commit, find the object at the given path. *)
-val traverse_tree : Object.hash -> string -> Object.obj
+val traverse_tree : Object.hash -> string -> Object.hash
