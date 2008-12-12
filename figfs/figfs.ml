@@ -64,12 +64,14 @@ let figfs_getattr (path:string) : Unix.LargeFile.stats =
   ) with Not_found -> raise (Unix.Unix_error (Unix.ENOENT, "getattr", path))
 
 let figfs_readdir (path:string) (fd:int) : string list =
-  try
-    let dir = traverse_tree !root_commit path in
-    match dir with
-    | Tree t -> List.map (fun (_,n,_) -> n) t.t_dirents
-    | _ -> raise (Unix.Unix_error (Unix.ENOTDIR, "readdir", path))
-  with Not_found -> raise (Unix.Unix_error (Unix.ENOENT, "readdir", path))
+  let entries =
+    try
+      let dir = traverse_tree !root_commit path in
+      match dir with
+      | Tree t -> List.map (fun (_,n,_) -> n) t.t_dirents
+      | _ -> raise (Unix.Unix_error (Unix.ENOTDIR, "readdir", path))
+    with Not_found -> raise (Unix.Unix_error (Unix.ENOENT, "readdir", path))
+  in "." :: ".." :: entries
 
 (* Copies the contents of the given string into the given buffer, returning
  * the number of bytes copied, or -1 if there is a size error. *)
@@ -104,8 +106,16 @@ let operations : Fuse.operations = {
   Fuse.read = figfs_read 
 }
 
+let make_absolute path =
+  let slash_index =
+    try String.index path '/'
+    with Not_found -> -1 in
+  if slash_index <> 0
+  then Printf.sprintf "%s/%s" (Sys.getcwd ()) path
+  else path
+
 let _ =
-  set_repo_dir Sys.argv.(1);
+  set_repo_dir (make_absolute Sys.argv.(1));
   root_commit := Sys.argv.(2);
   let args = Array.copy Sys.argv in
   Array.blit args 3 args 1 (Array.length args - 3);
