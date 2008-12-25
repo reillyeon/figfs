@@ -15,7 +15,7 @@
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
 BYTE_ENABLED = true
-NATIVE_ENABLED = true
+NATIVE_ENABLED = false
 
 CFLAGS += -fPIC
 
@@ -30,22 +30,22 @@ OCAML_INTERFACES = $(addsuffix .cmi, $(OCAML_OBJECTS))
 
 .PHONY: all clean test
 
-libzlib.a: $(C_OBJECTS)
+libzlibstub.a: $(C_OBJECTS)
 	ar rcs $@ $<
 
 dllzlib.so: $(C_OBJECTS)
 	gcc -o $@ -shared $(C_OBJECTS) -lz
 
-zlib.cmxa zlib.a: $(OCAML_NATIVE_OBJECTS) libzlib.a
-	ocamlopt -a -linkall -cclib -lzlib -cclib -lz -o $@ $<
+zlib.cmxa zlib.a: $(OCAML_NATIVE_OBJECTS) libzlibstub.a
+	ocamlopt -a -linkall -cclib -lzlibstub -cclib -lz -o $@ $<
 
-zlib.cma: $(OCAML_BYTE_OBJECTS) dllzlib.so
-	ocamlc -a -thread -dllib dllzlib.so -custom -linkall -cclib -lzlib -cclib -lz -o $@ $<
+zlib.cma: $(OCAML_BYTE_OBJECTS) libzlibstub.a dllzlib.so
+	ocamlc -a -thread -dllib dllzlib.so -custom -linkall -cclib -lzlibstub -cclib -lz -o $@ $<
 
 FILES = zlib zlibstub zlib_test
 
 clean:
-	rm -f dllzlib.so libzlib.a zlib_test
+	rm -f dllzlib.so libzlibstub.a zlib_test
 	rm -f $(filter-proper-targets $(glob $(addsuffix .*, $(FILES))))
 
 USE_OCAMLFIND = true

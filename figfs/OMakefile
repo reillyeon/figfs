@@ -16,11 +16,11 @@
 
 .PHONY: all clean
 
-NATIVE_ENABLED = true
+NATIVE_ENABLED = false
 BYTE_ENABLED = true
 
 OCAMLINCLUDES += ../zlib ../git ../fuse
-OCAML_LIBS += ../zlib/zlib ../git/git ../fuse/Fuse
+OCAML_LIBS += ../zlib/zlib ../git/git ../fuse/fuse
 OCAMLFLAGS += -thread
 
 FILES[] =

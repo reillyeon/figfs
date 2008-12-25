@@ -16,7 +16,7 @@
 
 .PHONY: all clean test
 
-NATIVE_ENABLED = true
+NATIVE_ENABLED = false
 BYTE_ENABLED = true
 
 OCAMLINCLUDES += ../zlib

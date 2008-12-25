@@ -15,7 +15,7 @@
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
 BYTE_ENABLED = true
-NATIVE_ENABLED = true
+NATIVE_ENABLED = false
 
 CFLAGS += -fPIC -D_FILE_OFFSET_BITS=64 -pthread -I. -DPIC -DNATIVE_CODE
 OCAMLFLAGS += -thread
@@ -43,22 +43,22 @@ OCAML_INTERFACES = $(addsuffix .cmi, $(OCAML_OBJECTS))
 $(GENERATED_FILES): Fuse_bindings.idl
 	camlidl -header $^
 
-libFuse.a: $(C_OBJECTS)
+libfusestub.a: $(C_OBJECTS)
 	ar rcs $@ $^
 
-dllFuse.so: $(C_OBJECTS)
+dllfuse.so: $(C_OBJECTS)
 	gcc -o $@ -shared $(C_OBJECTS) -lfuse
 
-Fuse.cmxa Fuse.a: $(OCAML_NATIVE_OBJECTS) libFuse.a
-	ocamlopt -a -thread -linkall -cclib -lFuse -cclib -lfuse -cclib -lcamlidl -o $@ $(OCAML_NATIVE_OBJECTS)
+fuse.cmxa fuse.a: $(OCAML_NATIVE_OBJECTS) libfusestub.a
+	ocamlopt -a -thread -linkall -cclib -lfusestub -cclib -lfuse -cclib -lcamlidl -o $@ $(OCAML_NATIVE_OBJECTS)
 
-Fuse.cma: $(OCAML_BYTE_OBJECTS) dllFuse.so
-	ocamlc -a -thread -dllib dllFuse.so -custom -linkall bigarray.cma -cclib -lFuse -cclib -lfuse -cclib -lcamlidl -o $@ $(OCAML_BYTE_OBJECTS)
+fuse.cma: $(OCAML_BYTE_OBJECTS) libfusestub.a dllfuse.so
+	ocamlc -a -thread -dllib dllfuse.so -custom -linkall bigarray.cma -cclib -lfusestub -cclib -lfuse -cclib -lcamlidl -o $@ $(OCAML_BYTE_OBJECTS)
 
 FILES = $(OCAML_OBJECTS) Fuse_bindings_stubs Fuse_util Unix_util_stubs fusexmp
 
 clean:
-	rm -f dllFuse.so libFuse.a fusexmp
+	rm -f dllfuse.so libfusestub.a fusexmp
 	rm -f $(filter-proper-targets $(glob $(addsuffix .*, $(FILES))))
 
 USE_OCAMLFIND = true
@@ -69,10 +69,10 @@ OCAMLPACKS[] =
 	bigarray
 
 OCAML_LIBS[] =
-	Fuse
+	fuse
 
 OCamlProgram(fusexmp, fusexmp)
 
-.DEFAULT: $(if $(BYTE_ENABLED), Fuse.cma) \
-          $(if $(NATIVE_ENABLED), Fuse.cmxa) \
+.DEFAULT: $(if $(BYTE_ENABLED), fuse.cma) \
+          $(if $(NATIVE_ENABLED), fuse.cmxa) \
           fusexmp
