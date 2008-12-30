@@ -54,11 +54,14 @@ all: .DEFAULT
 test_repo1: test_repo1.tar.bz2
 	tar xjf test_repo1.tar.bz2
 
-test: git_test test_repo1
+test_repo2: test_repo2.tar.bz2
+	tar xjf test_repo2.tar.bz2
+
+test: git_test test_repo1 test_repo2
 	./git_test
 
 clean:
-	rm -rf test_repo1
+	rm -rf test_repo1 test_repo2
 	rm -f git.cma git.a git.cmxa
 	rm -f $(filter-proper-targets $(glob $(addsuffix .*, $(FILES))))
 	rm -f cat-file cat-file.opt cat-file.run
