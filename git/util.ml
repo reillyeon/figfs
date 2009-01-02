@@ -1,5 +1,5 @@
 (* Utility functions.
- * Copyright (C) 2008 Reilly Grant
+ * Copyright (C) 2009 Reilly Grant
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -39,3 +39,33 @@ let split (s:string) (d:char) : string list =
 
 let unwords (s:string) : string list =
   split s ' '
+
+let varint_to_int (s:string) : int =
+  let rec helper pos off acc =
+    if pos >= (String.length s)
+    then failwith "Invalid variable-precision integer."
+    else (
+      let c = int_of_char (String.get s pos) in
+      let r = acc lor ((c land 0x7f) lsl off) in
+      if c land 0x80 <> 0
+      then helper (pos + 1) (off + 7) r
+      else r
+    )
+  in helper 0 0 0
+
+let compose (f:'b -> 'c) (g:'a -> 'b) (v:'a) =
+  f (g v)
+
+let index_from_with (s:string) (pos:int) (f:char -> bool) : int =
+  let rec helper pos =
+    if pos >= (String.length s)
+    then raise Not_found
+    else (
+      if f (String.get s pos)
+      then pos
+      else helper (pos + 1)
+    )
+  in helper pos
+
+let index_with (s:string) (f:char -> bool) : int =
+  index_from_with s 0 f

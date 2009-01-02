@@ -1,4 +1,4 @@
-(* Utility functions.
+(* Git delta format processor.
  * Copyright (C) 2009 Reilly Grant
  *
  * This program is free software; you can redistribute it and/or modify
@@ -16,22 +16,5 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  *)
 
-(* Split the given string at the given character. *)
-val split : string -> char -> string list
-
-(* Split the given string at spaces. *)
-val unwords : string -> string list
-
-(* Convert the given variable-length encoded integer to a real int. *)
-val varint_to_int : string -> int
-
-(* Standard function composition. *)
-val compose : ('b -> 'c) -> ('a -> 'b) -> 'a -> 'c
-
-(* Find the index of the first character which satisfies the given
- * predicate. *)
-val index_with : string -> (char -> bool) -> int
-
-(* Find the index of the first character after the given position which
- * satisfies the given predicate. *)
-val index_from_with : string -> int -> (char -> bool) -> int
+(* Use the a patch (2nd argument) to the base document (1st argument). *)
+val patch : string -> string -> string
