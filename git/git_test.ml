@@ -108,6 +108,45 @@ let loosefile_tests = "loosefile tests" >::: [
   "blob5" >:: loosefile_test blob5
 ]
 
+(* Pack file tests. *)
+
+let test_repo2_pack = "a99efc8d8a02bb9155dce1bfb6d3583ac023fe33"
+
+let enumerate_packs_test () =
+  Repository.set_repo_dir "test_repo2";
+  let v = Packfile.enumerate_packs () in
+  assert_equal v [test_repo2_pack]
+
+let scan_index_test (h:hash) (expected:int64) () =
+  Repository.set_repo_dir "test_repo2";
+  let v = Packfile.scan_index test_repo2_pack h
+  in assert_equal v expected
+
+let scan_index_fail_test (h:hash) () =
+  Repository.set_repo_dir "test_repo2";
+  assert_raises Not_found (fun () -> Packfile.scan_index test_repo2_pack h)
+
+let packfile_tests = "pack file tests" >::: [
+  "enumerate1" >:: enumerate_packs_test;
+  "scan1" >:: scan_index_test "20bedc9d11bdbfdb473bbfa1c43a6c6f8fd06853" 0xcL;
+  "scan2" >:: scan_index_test "257cc5642cb1a054f08cc83f2d943e56fd3ebe99" 0x2abL;
+  "scan3" >:: scan_index_test "296e56023cdc034d2735fee8c0d85a659d1b07f4" 0x2d4L;
+  "scan4" >:: scan_index_test "2c1d0e7302ad98e1a6b3da8fcc60e84b40522b8f" 0x269L;
+  "scan5" >:: scan_index_test "5716ca5987cbf97d6bb54920bea6adde242d87e6" 0x2b8L;
+  "scan6" >:: scan_index_test "57f9482bee1ff9e54dfd12024c041d3a8ab34ddf" 0x150L;
+  "scan7" >:: scan_index_test "96828b6633da42da034196d12af3fe4332b4b347" 0xaaL;
+  "scan8" >:: scan_index_test "96b342b9881b0d31a6d182fcee0be26ac6187d92" 0x2c5L;
+  "scan9" >:: scan_index_test "c10c78b1d82190e1b339c6ca92a30438f3a3ba7d" 0x239L;
+  "scana" >:: scan_index_test "c5c94f726f68616a39a2f53686ae85c8755c3f4d" 0x1dbL;
+  "scanb" >:: scan_index_test "d0c4445ef1c52236f14ed9a36a97a5404727240c" 0x251L;
+  "scanc" >:: scan_index_test "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391" 0x302L;
+  "fail1" >:: scan_index_fail_test "0000000000000000000000000000000000000000";
+  "fail2" >:: scan_index_fail_test "c10c78b1d82190e1b339c6ca92a30430f3a3ba7d";
+  "fail3" >:: scan_index_fail_test "2c1d0e7302ad98e2a6b3da8fcc60e84b40522b8f";
+  "fail4" >:: scan_index_fail_test "d4c4445ef1c52236f14ed9a36a97a5404727240c";
+  "fail5" >:: scan_index_fail_test "ffffffffffffffffffffffffffffffffffffffff"
+]
+
 (* Tree traversal tests. *)
 
 let tree_traverse_test (c:hash) (p:string) (e:obj) () =
@@ -135,6 +174,7 @@ let tree_traverse_tests = "tree traversal tests" >::: [
 
 let all_tests = "all tests" >::: [
   loosefile_tests;
+  packfile_tests;
   tree_traverse_tests
 ]
 

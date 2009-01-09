@@ -22,12 +22,25 @@ let hex_of_int (i:int) : char =
   then char_of_int (n + 48)
   else char_of_int (n + 87)
 
+let int_of_hex (c:char) : int =
+  if '0' <= c && c <= '9'
+  then int_of_char c - 48
+  else if 'a' <= c && c <= 'f'
+  then int_of_char c - 87
+  else failwith "invalid hexadecimal character"
+
 let base256_of_base16 (s:string) : string =
-  failwith "base256_of_base16"
+  let length = String.length s / 2 in
+  let buf = String.create (length) in
+  for i = 0 to length - 1 do
+    let a = int_of_hex (String.get s (i * 2)) in
+    let b = int_of_hex (String.get s (i * 2 + 1)) in
+    String.set buf i (char_of_int ((a lsl 4) lor b))
+  done;
+  buf
 
 let base16_of_base256 (s:string) : string =
-  let length = String.length s in
-  let buf = String.create (length * 2) in
+  let buf = String.create (String.length s * 2) in
   let offset = ref 0 in
   String.iter (fun c ->
     let n = int_of_char c in

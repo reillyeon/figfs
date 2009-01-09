@@ -35,3 +35,18 @@ val index_with : string -> (char -> bool) -> int
 (* Find the index of the first character after the given position which
  * satisfies the given predicate. *)
 val index_from_with : string -> int -> (char -> bool) -> int
+
+(* Check if the second string starts with the first string. *)
+val starts_with : string -> string -> bool
+
+(* Check if the second string ends with the first string. *)
+val ends_with : string -> string -> bool
+
+(* Convert 4-byte string buffer (big-endian) to an int (only 31-bits). *)
+val decode_int : string -> int
+
+(* Convert 4-byte string buffer (big-endian) to an int32. *)
+val decode_int32 : string -> int32
+
+(* Convert 8-byte string buffer (big-endian) to an int64. *)
+val decode_int64 : string -> int64
