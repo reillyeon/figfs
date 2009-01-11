@@ -22,17 +22,20 @@ type obj_type =
   | TCommit
   | TTree
   | TBlob
+  | TTag
 
 let string_of_obj_type : obj_type -> string = function
   | TCommit -> "commit"
   | TTree -> "tree"
   | TBlob -> "blob"
+  | TTag -> "tag"
 
 let obj_type_of_string : string -> obj_type = function
   | "commit" -> TCommit
   | "tree" -> TTree
   | "blob" -> TBlob
-  | t -> failwith (Printf.sprintf "Unknown object type '%s'." t)
+  | "tag" -> TTag
+  | t -> failwith (Printf.sprintf "Unknown object type: %s" t)
 
 type obj_stat = {
     os_hash : hash; (* Object hash. *)
@@ -62,6 +65,9 @@ let string_of_commit commit : string =
 
 type dirent = int * string * hash
 
+let string_of_dirent ((p,n,h):dirent) : string =
+  Printf.sprintf "%s %06o %s" h p n
+
 type tree = {
     t_hash : hash; (* Hash of this tree. *)
     t_dirents : dirent list (* Entries under this tree. *)
@@ -80,28 +86,43 @@ type blob = {
 let string_of_blob blob : string =
   Printf.sprintf "Blob %s {\n%s\n}" blob.b_hash blob.b_data
 
+type tag = {
+    g_hash : hash; (* Hash of this tag. *)
+    g_object : hash; (* Object tagged. *)
+    g_type : obj_type; (* Type of object tagged. *)
+    g_name : string; (* Name of tag. *)
+    g_tagger : string; (* Author of tag. *)
+    g_message : string (* Tag message. *)
+  }
+
+let string_of_tag tag : string =
+  Printf.sprintf "Tag %s : %s {\nObject: %s\nType: %s\nTagger: %s\n\n%s\n}"
+    tag.g_name tag.g_hash tag.g_object (string_of_obj_type tag.g_type)
+    tag.g_tagger tag.g_message
+
 type obj =
   | Commit of commit
   | Tree of tree
   | Blob of blob
-
-let string_of_dirent ((p,n,h):dirent) : string =
-  Printf.sprintf "%s %06o %s" h p n
+  | Tag of tag
 
 let string_of_obj : obj -> string = function
   | Commit c -> string_of_commit c
   | Tree t -> string_of_tree t
   | Blob b -> string_of_blob b
+  | Tag g -> string_of_tag g
 
 let hash_of_obj : obj -> hash = function
   | Commit c -> c.c_hash
   | Tree t -> t.t_hash
   | Blob b -> b.b_hash
+  | Tag g -> g.g_hash
 
 let type_of_obj : obj -> obj_type = function
   | Commit _ -> TCommit
   | Tree _ -> TTree
   | Blob _ -> TBlob
+  | Tag _ -> TTag
 
 let parse_commit (data:string) : hash * hash list * string * string * string =
   let rec helper data tree_acc parent_acc author_acc committer_acc =
@@ -111,7 +132,7 @@ let parse_commit (data:string) : hash * hash list * string * string * string =
       let m = String.sub data 1 (String.length data - 1) in
       match (tree_acc, parent_acc, author_acc, committer_acc) with
       | (Some t, p, Some a, Some c) -> (t,p,a,c,m)
-      | _ -> failwith "Commit not complete."
+      | _ -> failwith "Commit parse not complete."
     else
       let space_index = String.index data ' ' in
       let field = String.sub data 0 space_index in
@@ -127,6 +148,31 @@ let parse_commit (data:string) : hash * hash list * string * string * string =
       | "committer" -> helper rest tree_acc parent_acc author_acc (Some value)
       | _ -> failwith ("Unknown commit property: " ^ field)
   in helper data None [] None None
+
+let parse_tag (data:string) : hash * obj_type * string * string * string =
+    let rec helper data object_acc type_acc name_acc tagger_acc =
+    let newline_index = String.index data '\n' in
+    if newline_index = 0
+    then
+      let m = String.sub data 1 (String.length data - 1) in
+      match object_acc, type_acc, name_acc, tagger_acc with
+      | (Some o, Some t, Some n, Some a) -> (o,t,n,a,m)
+      | _ -> failwith "Tag parse not complete."
+    else
+      let space_index = String.index data ' ' in
+      let field = String.sub data 0 space_index in
+      let value = String.sub data (space_index + 1)
+                                  (newline_index - space_index - 1) in
+      let rest = String.sub data (newline_index + 1)
+                                 (String.length data - newline_index - 1) in
+      match field with
+      | "object" -> helper rest (Some value) type_acc name_acc tagger_acc
+      | "type" ->helper rest object_acc (Some (obj_type_of_string value))
+            name_acc tagger_acc
+      | "tag" -> helper rest object_acc type_acc (Some value) tagger_acc
+      | "tagger" -> helper rest object_acc type_acc name_acc (Some value)
+      | _ -> failwith ("Unknown tag property: " ^ field)
+  in helper data None None None None
 
 let rec parse_tree (data:string) : (int * string * hash) list =
   let data_length = String.length data in
@@ -156,3 +202,11 @@ let read_obj (h:hash) (typ:obj_type) (data:string) : obj =
                     t_dirents = parse_tree data }
   | TBlob -> Blob { b_hash = h;
                     b_data = data }
+  | TTag ->
+      let objekt, typ, name, tagger, message = parse_tag data in
+      Tag { g_hash = h;
+            g_object = objekt;
+            g_type = typ;
+            g_name = name;
+            g_tagger = tagger;
+            g_message = message }

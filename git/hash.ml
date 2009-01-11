@@ -17,7 +17,7 @@
  *)
 
 let hex_of_int (i:int) : char =
-  let n = i mod 16 in
+  let n = i land 0xf in
   if n >= 0 && n < 10
   then char_of_int (n + 48)
   else char_of_int (n + 87)
@@ -27,6 +27,8 @@ let int_of_hex (c:char) : int =
   then int_of_char c - 48
   else if 'a' <= c && c <= 'f'
   then int_of_char c - 87
+  else if 'A' <= c && c <= 'F'
+  then int_of_char c - 55
   else failwith "invalid hexadecimal character"
 
 let base256_of_base16 (s:string) : string =

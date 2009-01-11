@@ -55,6 +55,7 @@ let traverse_tree (h:hash) (path:string) : obj =
           List.find (fun (_,name,_) -> name = item) t.t_dirents in
         helper hash rest
       | Blob b -> raise Not_found
+      | Tag g -> helper g.g_object path
     )
     | [] -> (
       match find_object h with

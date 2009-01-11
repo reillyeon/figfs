@@ -86,6 +86,14 @@ let blob5 = Blob {
   b_hash = "5716ca5987cbf97d6bb54920bea6adde242d87e6";
   b_data = "bar\n" }
 
+let tag0 = Tag {
+  g_hash = "db7471e7aa23b42e59f4363bab8c00568b58ad5c";
+  g_object = "96828b6633da42da034196d12af3fe4332b4b347";
+  g_type = TCommit;
+  g_name = "tag0";
+  g_tagger = "Reilly Grant <reillyeon@qotw.net> 1231637882 -0500";
+  g_message = "This is a tag.\n" }
+
 (* Loose object test files. *)
 
 let loosefile_test (e:obj) () =
@@ -105,7 +113,8 @@ let loosefile_tests = "loosefile tests" >::: [
   "blob2" >:: loosefile_test blob2;
   "blob3" >:: loosefile_test blob3;
   "blob4" >:: loosefile_test blob4;
-  "blob5" >:: loosefile_test blob5
+  "blob5" >:: loosefile_test blob5;
+  "tag0" >:: loosefile_test tag0
 ]
 
 (* Pack file tests. *)

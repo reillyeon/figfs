@@ -22,6 +22,7 @@ type obj_type =
   | TCommit
   | TTree
   | TBlob
+  | TTag
 
 val string_of_obj_type : obj_type -> string
 
@@ -62,10 +63,22 @@ type blob = {
 
 val string_of_blob : blob -> string
 
+type tag = {
+    g_hash : hash; (* Hash of this tag. *)
+    g_object : hash; (* Object tagged. *)
+    g_type : obj_type; (* Type of object tagged. *)
+    g_name : string; (* Name of tag. *)
+    g_tagger : string; (* Author of tag. *)
+    g_message : string (* Tag message. *)
+  }
+
+val string_of_tag : tag -> string
+
 type obj =
   | Commit of commit
   | Tree of tree
   | Blob of blob
+  | Tag of tag
 
 val string_of_obj : obj -> string
 
