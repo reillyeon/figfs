@@ -19,13 +19,14 @@
 open Util
 
 let patch (base:string) (diff:string) : string =
-  let is_seven_bit c = int_of_char c land 0x80 = 0 in
   let out_size_pos = index_with diff is_seven_bit + 1 in
-  let base_size = varint_to_int (String.sub diff 0 out_size_pos) in
+  let base_size = int_of_varint (String.sub diff 0 out_size_pos) in
   if base_size <> (String.length base)
-  then failwith "Delta header disagrees with base size." else ();
+  then failwith
+      (Printf.sprintf "Delta header (%d) disagrees with base size (%d)."
+         base_size (String.length base));
   let diff_begin = index_from_with diff out_size_pos is_seven_bit + 1 in
-  let out_size = varint_to_int (String.sub diff out_size_pos diff_begin) in
+  let out_size = int_of_varint (String.sub diff out_size_pos diff_begin) in
   let out = String.create out_size in
   let diff_pos = ref diff_begin in
   let out_pos = ref 0 in

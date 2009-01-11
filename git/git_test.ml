@@ -19,6 +19,10 @@
 open OUnit
 open Object
 
+let change_repo (dir:string) () : unit =
+  Repository.set_repo_dir dir;
+  Cache.clear ()
+
 (* Test repository data. *)
 
 let commit1 = Commit {
@@ -94,62 +98,27 @@ let tag0 = Tag {
   g_tagger = "Reilly Grant <reillyeon@qotw.net> 1231637882 -0500";
   g_message = "This is a tag.\n" }
 
-(* Loose object test files. *)
-
-let loosefile_test (e:obj) () =
-  let v = Loosefile.find_object (hash_of_obj e) in
+let object_test (e:obj) () =
+  let v = Manager.find_object (hash_of_obj e) in
+  if v <> e
+  then Printf.printf "Expected: %s\nGot: %s\n" (string_of_obj e) (string_of_obj v)
+  else ();
   assert_equal v e
 
-let loosefile_tests = "loosefile tests" >::: [
-  "commit1" >:: loosefile_test commit1;
-  "commit2" >:: loosefile_test commit2;
-  "commit3" >:: loosefile_test commit3;
-  "tree1" >:: loosefile_test tree1;
-  "tree2" >:: loosefile_test tree2;
-  "tree3" >:: loosefile_test tree3;
-  "tree4" >:: loosefile_test tree4;
-  "blob1" >:: loosefile_test blob1;
-  "blob2" >:: loosefile_test blob2;
-  "blob3" >:: loosefile_test blob3;
-  "blob4" >:: loosefile_test blob4;
-  "blob5" >:: loosefile_test blob5;
-  "tag0" >:: loosefile_test tag0
-]
-
-(* Pack file tests. *)
-
-let test_repo2_pack = "a99efc8d8a02bb9155dce1bfb6d3583ac023fe33"
-
-let enumerate_packs_test () =
-  let v = Packfile.enumerate_packs () in
-  assert_equal v [test_repo2_pack]
-
-let scan_index_test (h:hash) (expected:int64) () =
-  let v = Packfile.scan_index test_repo2_pack h
-  in assert_equal v expected
-
-let scan_index_fail_test (h:hash) () =
-  assert_raises Not_found (fun () -> Packfile.scan_index test_repo2_pack h)
-
-let packfile_tests = "pack file tests" >::: [
-  "enumerate1" >:: enumerate_packs_test;
-  "scan1" >:: scan_index_test "20bedc9d11bdbfdb473bbfa1c43a6c6f8fd06853" 0xcL;
-  "scan2" >:: scan_index_test "257cc5642cb1a054f08cc83f2d943e56fd3ebe99" 0x2abL;
-  "scan3" >:: scan_index_test "296e56023cdc034d2735fee8c0d85a659d1b07f4" 0x2d4L;
-  "scan4" >:: scan_index_test "2c1d0e7302ad98e1a6b3da8fcc60e84b40522b8f" 0x269L;
-  "scan5" >:: scan_index_test "5716ca5987cbf97d6bb54920bea6adde242d87e6" 0x2b8L;
-  "scan6" >:: scan_index_test "57f9482bee1ff9e54dfd12024c041d3a8ab34ddf" 0x150L;
-  "scan7" >:: scan_index_test "96828b6633da42da034196d12af3fe4332b4b347" 0xaaL;
-  "scan8" >:: scan_index_test "96b342b9881b0d31a6d182fcee0be26ac6187d92" 0x2c5L;
-  "scan9" >:: scan_index_test "c10c78b1d82190e1b339c6ca92a30438f3a3ba7d" 0x239L;
-  "scana" >:: scan_index_test "c5c94f726f68616a39a2f53686ae85c8755c3f4d" 0x1dbL;
-  "scanb" >:: scan_index_test "d0c4445ef1c52236f14ed9a36a97a5404727240c" 0x251L;
-  "scanc" >:: scan_index_test "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391" 0x302L;
-  "fail1" >:: scan_index_fail_test "0000000000000000000000000000000000000000";
-  "fail2" >:: scan_index_fail_test "c10c78b1d82190e1b339c6ca92a30430f3a3ba7d";
-  "fail3" >:: scan_index_fail_test "2c1d0e7302ad98e2a6b3da8fcc60e84b40522b8f";
-  "fail4" >:: scan_index_fail_test "d4c4445ef1c52236f14ed9a36a97a5404727240c";
-  "fail5" >:: scan_index_fail_test "ffffffffffffffffffffffffffffffffffffffff"
+let object_tests = "object tests" >::: [
+  "commit1" >:: object_test commit1;
+  "commit2" >:: object_test commit2;
+  "commit3" >:: object_test commit3;
+  "tree1" >:: object_test tree1;
+  "tree2" >:: object_test tree2;
+  "tree3" >:: object_test tree3;
+  "tree4" >:: object_test tree4;
+  "blob1" >:: object_test blob1;
+  "blob2" >:: object_test blob2;
+  "blob3" >:: object_test blob3;
+  "blob4" >:: object_test blob4;
+  "blob5" >:: object_test blob5;
+  "tag0" >:: object_test tag0
 ]
 
 (* Tree traversal tests. *)
@@ -175,19 +144,55 @@ let tree_traverse_tests = "tree traversal tests" >::: [
   "fail3" >:: tree_traverse_fail_test (hash_of_obj commit3) "/e/f"
 ]
 
-let change_repo (dir:string) () : unit =
-  Repository.set_repo_dir dir;
-  Cache.clear ()
+(* Pack file tests. *)
+
+let test_repo2_pack = "12f3aa44160a2407b01a744b9584cec9758ddec6"
+
+let enumerate_packs_test () =
+  let v = Packfile.enumerate_packs () in
+  assert_equal v [test_repo2_pack]
+
+let scan_index_test (h:hash) (expected:int64) () =
+  let v = Packfile.scan_index test_repo2_pack h
+  in assert_equal v expected
+
+let scan_index_fail_test (h:hash) () =
+  assert_raises Not_found (fun () -> Packfile.scan_index test_repo2_pack h)
+
+let packfile_tests = "pack file tests" >::: [
+  "set test_repo2" >:: change_repo "test_repo2";
+  "enumerate1" >:: enumerate_packs_test;
+  "scan1" >:: scan_index_test "20bedc9d11bdbfdb473bbfa1c43a6c6f8fd06853" 0xcL;
+  "scan2" >:: scan_index_test "257cc5642cb1a054f08cc83f2d943e56fd3ebe99" 0x2abL;
+  "scan3" >:: scan_index_test "296e56023cdc034d2735fee8c0d85a659d1b07f4" 0x2d4L;
+  "scan4" >:: scan_index_test "2c1d0e7302ad98e1a6b3da8fcc60e84b40522b8f" 0x269L;
+  "scan5" >:: scan_index_test "5716ca5987cbf97d6bb54920bea6adde242d87e6" 0x2b8L;
+  "scan6" >:: scan_index_test "57f9482bee1ff9e54dfd12024c041d3a8ab34ddf" 0x150L;
+  "scan7" >:: scan_index_test "96828b6633da42da034196d12af3fe4332b4b347" 0xaaL;
+  "scan8" >:: scan_index_test "96b342b9881b0d31a6d182fcee0be26ac6187d92" 0x2c5L;
+  "scan9" >:: scan_index_test "c10c78b1d82190e1b339c6ca92a30438f3a3ba7d" 0x239L;
+  "scana" >:: scan_index_test "c5c94f726f68616a39a2f53686ae85c8755c3f4d" 0x1dbL;
+  "scanb" >:: scan_index_test "d0c4445ef1c52236f14ed9a36a97a5404727240c" 0x251L;
+  "scanc" >:: scan_index_test "db7471e7aa23b42e59f4363bab8c00568b58ad5c" 0x30bL;
+  "scand" >:: scan_index_test "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391" 0x302L;
+  "fail1" >:: scan_index_fail_test "0000000000000000000000000000000000000000";
+  "fail2" >:: scan_index_fail_test "c10c78b1d82190e1b339c6ca92a30430f3a3ba7d";
+  "fail3" >:: scan_index_fail_test "2c1d0e7302ad98e2a6b3da8fcc60e84b40522b8f";
+  "fail4" >:: scan_index_fail_test "d4c4445ef1c52236f14ed9a36a97a5404727240c";
+  "fail5" >:: scan_index_fail_test "ffffffffffffffffffffffffffffffffffffffff";
+  object_tests;
+  tree_traverse_tests;
+]
+
+let loosefile_tests = "loose file test" >::: [
+  "set test_repo1" >:: change_repo "test_repo1";
+  object_tests;
+  tree_traverse_tests
+]
 
 let all_tests = "all tests" >::: [
-  "set test_repo1" >:: change_repo "test_repo1";
   loosefile_tests;
-  "set test_repo2" >:: change_repo "test_repo2";
   packfile_tests;
-  "set test_repo1" >:: change_repo "test_repo1";
-  tree_traverse_tests;
-(* "set test_repo2" >:: change_repo "test_repo2";
-   tree_traverse_tests *)
 ]
 
 let _ =

@@ -23,7 +23,11 @@ val split : string -> char -> string list
 val unwords : string -> string list
 
 (* Convert the given variable-length encoded integer to a real int. *)
-val varint_to_int : string -> int
+val int_of_varint : string -> int
+
+(* Convert the given variable-length encoded integer (done in the offset style)
+ * to a real int. *)
+val int_of_offsetint : string -> int
 
 (* Standard function composition. *)
 val compose : ('b -> 'c) -> ('a -> 'b) -> 'a -> 'c
@@ -50,3 +54,5 @@ val decode_int32 : string -> int32
 
 (* Convert 8-byte string buffer (big-endian) to an int64. *)
 val decode_int64 : string -> int64
+
+val is_seven_bit : char -> bool

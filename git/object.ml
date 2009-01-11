@@ -23,12 +23,16 @@ type obj_type =
   | TTree
   | TBlob
   | TTag
+  | TOfsDelta
+  | TRefDelta
 
 let string_of_obj_type : obj_type -> string = function
   | TCommit -> "commit"
   | TTree -> "tree"
   | TBlob -> "blob"
   | TTag -> "tag"
+  | TOfsDelta -> "offset delta"
+  | TRefDelta -> "reference delta"
 
 let obj_type_of_string : string -> obj_type = function
   | "commit" -> TCommit
@@ -36,6 +40,15 @@ let obj_type_of_string : string -> obj_type = function
   | "blob" -> TBlob
   | "tag" -> TTag
   | t -> failwith (Printf.sprintf "Unknown object type: %s" t)
+
+let obj_type_of_int : int -> obj_type = function
+  | 1 -> TCommit
+  | 2 -> TTree
+  | 3 -> TBlob
+  | 4 -> TTag
+  | 6 -> TOfsDelta
+  | 7 -> TRefDelta
+  | t -> failwith (Printf.sprintf "Unknown object type: %d" t)
 
 type obj_stat = {
     os_hash : hash; (* Object hash. *)
@@ -210,3 +223,5 @@ let parse_obj (h:hash) (typ:obj_type) (data:string) : obj =
             g_name = name;
             g_tagger = tagger;
             g_message = message }
+  | TOfsDelta -> failwith "Cannot parse delta object."
+  | TRefDelta -> failwith "Cannot parse delta object."

@@ -23,10 +23,14 @@ type obj_type =
   | TTree
   | TBlob
   | TTag
+  | TOfsDelta
+  | TRefDelta
 
 val string_of_obj_type : obj_type -> string
 
 val obj_type_of_string : string -> obj_type
+
+val obj_type_of_int : int -> obj_type
 
 type obj_stat = {
     os_hash : hash; (* Object hash. *)

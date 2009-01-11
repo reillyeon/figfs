@@ -26,19 +26,22 @@ let find_loose_file (hash:hash) : string =
 
 let find_object_raw (hash:hash) : obj_stat * string =
   let path = find_loose_file hash in
-  let file = open_in_bin path in
-  let file_size = in_channel_length file in
-  let buf = String.create file_size in
-  really_input file buf 0 file_size;
-  let inflated = Zlib.inflate buf 50 in
-  let space_index = String.index inflated ' ' in
-  let null_index = String.index inflated '\000' in
-  let typ = obj_type_of_string (String.sub inflated 0 space_index) in
-  let size = int_of_string (String.sub inflated (space_index + 1) 
-                              (null_index - space_index - 1)) in
-  let inflated_data = Zlib.inflate buf (size + null_index + 1) in
-  let data = String.sub inflated_data (null_index + 1) size in
-  ( { os_hash = hash; os_type = typ; os_size = size }, data )
+  if Sys.file_exists path
+  then (
+    let file = open_in_bin path in
+    let file_size = in_channel_length file in
+    let buf = String.create file_size in
+    really_input file buf 0 file_size;
+    let inflated = Zlib.inflate buf 50 in
+    let space_index = String.index inflated ' ' in
+    let null_index = String.index inflated '\000' in
+    let typ = obj_type_of_string (String.sub inflated 0 space_index) in
+    let size = int_of_string (String.sub inflated (space_index + 1)
+                                (null_index - space_index - 1)) in
+    let inflated_data = Zlib.inflate buf (size + null_index + 1) in
+    let data = String.sub inflated_data (null_index + 1) size in
+    ( { os_hash = hash; os_type = typ; os_size = size }, data )
+  ) else raise Not_found
 
 let stat_object (hash:hash) : obj_stat =
   let stat, _ = find_object_raw hash in

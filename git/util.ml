@@ -40,7 +40,7 @@ let split (s:string) (d:char) : string list =
 let unwords (s:string) : string list =
   split s ' '
 
-let varint_to_int (s:string) : int =
+let int_of_varint (s:string) : int =
   let rec loop pos off acc =
     if pos >= (String.length s)
     then failwith "Invalid variable-precision integer."
@@ -52,6 +52,22 @@ let varint_to_int (s:string) : int =
       else r
     )
   in loop 0 0 0
+
+let int_of_offsetint (s:string) : int =
+  let rec loop pos acc =
+    if pos >= (String.length s)
+    then failwith "Invalid variable-precision (offset type) integer."
+    else (
+      let c = int_of_char (String.get s pos) in
+      let r = ((acc + 1) lsl 7) + (c land 0x7f) in
+      if c land 0x80 <> 0
+      then loop (pos + 1) r
+      else r
+    ) in
+  let first_byte = int_of_char (String.get s 0) in
+  if first_byte land 0x80 = 0
+  then first_byte
+  else loop 1 (0x7f land int_of_char (String.get s 0))
 
 let compose (f:'b -> 'c) (g:'a -> 'b) (v:'a) =
   f (g v)
@@ -119,3 +135,6 @@ let decode_int64 (buf:string) : int64 =
   let abcd = Int64.logor (Int64.logor (Int64.logor a b) c) d in
   let efgh = Int64.logor (Int64.logor (Int64.logor e f) g) h in
   Int64.logor abcd efgh
+
+let is_seven_bit (c:char) : bool =
+  int_of_char c land 0x80 = 0

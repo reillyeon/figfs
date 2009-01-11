@@ -136,9 +136,74 @@ let scan_index (pack:string) (hash:hash) : int64 =
     )
   ) with e -> close fd; raise e
 
+(* Unpack a simply compressed object. Expects fd to be seeked to the beginning
+ * of the compressed data. *)
+let unpack_compressed_object (stat:obj_stat) (fd:file_descr)
+    : obj_stat * string =
+  if stat.os_size <> 0
+  then (
+    let compressed_size = stat.os_size + 8 in (* zlib smallest possible *)
+    let compressed_data = String.create compressed_size in
+    ignore (read fd compressed_data 0 compressed_size);
+    stat, (Zlib.inflate compressed_data stat.os_size)
+  ) else stat, ""
+
+(* Read an object from the pack, expects fd to already be seeked to offset. *)
+let rec unpack_object (hash:hash) (offset:int64) (fd:file_descr)
+    : obj_stat * string =
+  (* Read the object header from the pack. *)
+  let buf = String.create 80 in
+  ignore (read fd buf 0 80);
+  let header = int_of_varint buf in
+  (* The object type is stored as bits 7 to 5 of the size... weird *)
+  let int_type = (header lsr 4) land 0x7 in
+  let typ = obj_type_of_int int_type in
+  let size = ((header lsr 3) land (lnot 0xf)) lor (header land 0xf) in
+  let stat = { os_hash = hash; os_type = typ; os_size = size } in
+  (* Seek to the beginning of the data. *)
+  let data_pos = index_with buf is_seven_bit + 1 in
+  let data_offset = Int64.add offset (Int64.of_int data_pos) in
+  ignore (LargeFile.lseek fd data_offset SEEK_SET);
+  match typ with
+  | TCommit | TTree | TBlob | TTag -> unpack_compressed_object stat fd
+  | TOfsDelta -> unpack_ofs_delta_object offset stat fd
+  | TRefDelta -> unpack_ref_delta_object stat fd
+
+(* Unpack an offset delta object. Expects fd to be seeked to the beginning of
+ * the offset data. *)
+and unpack_ofs_delta_object (offset:int64) (stat:obj_stat) (fd:file_descr)
+   : obj_stat * string =
+  let offset_buf = String.create 20 in
+  ignore (read fd offset_buf 0 20);
+  let base_offset =
+    Int64.sub offset (Int64.of_int (int_of_offsetint offset_buf)) in
+  let data_pos = index_with offset_buf is_seven_bit + 1 - 20 in
+  ignore (LargeFile.lseek fd (Int64.of_int data_pos) SEEK_CUR);
+  let compressed_size = stat.os_size + 8 in (* zlib smallest possible *)
+  let compressed_patch = String.create compressed_size in
+  ignore (read fd compressed_patch 0 compressed_size);
+  let patch = Zlib.inflate compressed_patch stat.os_size in
+  ignore (LargeFile.lseek fd base_offset SEEK_SET);
+  let base_stat, base =
+    unpack_object "0000000000000000000000000000000000000000" base_offset fd in
+  let data = Delta.patch base patch in
+  { stat with
+    os_size = String.length data;
+    os_type = base_stat.os_type }, data
+
+(* Unpack a reference delta object. Expects fd to be seeked to the beginning of
+ * the referenced object's hash. *)
+and unpack_ref_delta_object (stat:obj_stat) (fd:file_descr)
+   : obj_stat * string =
+  failwith "unpack_ref_delta_object"
+
 let find_object_raw_in_pack (pack:string) (hash:hash) : obj_stat * string =
+  (* Get the object offset from the index. *)
   let offset = scan_index pack hash in
-  ignore offset; failwith "find_object_raw_in_pack"
+  (* Seek to the object. *)
+  let fd = openfile (pack_path pack) [O_RDONLY] 0 in
+  ignore (LargeFile.lseek fd offset SEEK_SET);
+  unpack_object hash offset fd
 
 let find_object_raw (hash:hash) : obj_stat * string =
   let packs = enumerate_packs () in
