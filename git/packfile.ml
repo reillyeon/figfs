@@ -84,7 +84,6 @@ let scan_indexv1 (fd:file_descr) (hash:hash) : int64 =
       then decode_int32 (String.sub buf 0 4)
       else loop (pos + 1)
     ) in
-  close fd;
   Int64.of_int32 (loop startpos)
 
 let scan_indexv2 (fd:file_descr) (hash:hash) : int64 =
@@ -127,14 +126,16 @@ let scan_index (pack:string) (hash:hash) : int64 =
   let fd = openfile (index_path pack) [O_RDONLY] 0 in
   let buf = String.create 4 in
   ignore (read fd buf 0 4);
-  try (
+  let offset = try (
     if buf = "\xfftOc"
     then scan_indexv2 fd hash
     else (
       ignore (lseek fd 0 SEEK_SET);
       scan_indexv1 fd hash
     )
-  ) with e -> close fd; raise e
+  ) with e -> close fd; raise e in
+  close fd;
+  offset
 
 (* Unpack a simply compressed object. Expects fd to be seeked to the beginning
  * of the compressed data. *)
@@ -195,17 +196,31 @@ and unpack_ofs_delta_object (offset:int64) (stat:obj_stat) (fd:file_descr)
  * the referenced object's hash. *)
 and unpack_ref_delta_object (stat:obj_stat) (fd:file_descr)
    : obj_stat * string =
-  failwith "unpack_ref_delta_object"
+  let base_hash = String.create 20 in
+  ignore (read fd base_hash 0 20);
+  let base_stat, base = find_object_raw (base16_of_base256 base_hash) in
+  let compressed_size = stat.os_size + 8 in (* zlib smallest possible *)
+  let compressed_patch = String.create compressed_size in
+  ignore (read fd compressed_patch 0 compressed_size);
+  let patch = Zlib.inflate compressed_patch stat.os_size in
+  let data = Delta.patch base patch in
+  { stat with
+    os_size = String.length data;
+    os_type = base_stat.os_type }, data
 
-let find_object_raw_in_pack (pack:string) (hash:hash) : obj_stat * string =
+and find_object_raw_in_pack (pack:string) (hash:hash) : obj_stat * string =
   (* Get the object offset from the index. *)
   let offset = scan_index pack hash in
   (* Seek to the object. *)
   let fd = openfile (pack_path pack) [O_RDONLY] 0 in
   ignore (LargeFile.lseek fd offset SEEK_SET);
-  unpack_object hash offset fd
+  let objekt =
+    try unpack_object hash offset fd
+    with e -> close fd; raise e in
+  close fd;
+  objekt
 
-let find_object_raw (hash:hash) : obj_stat * string =
+and find_object_raw (hash:hash) : obj_stat * string =
   let packs = enumerate_packs () in
   let data = List.fold_left (fun data pack ->
     try (

@@ -22,13 +22,16 @@ open Manager
 
 let worklist : string list ref = ref []
 let commit : string option ref = ref None
+let repo : string option ref = ref (find_repo ())
 
 let _ =
   Arg.parse
     [("-t", Arg.String (fun s -> commit := Some s),
-      "Lookup files under a tree.")]
+      "Lookup files under a tree.");
+     ("-r", Arg.String (fun s -> repo := Some s),
+      "Repository path.")]
     (fun f -> worklist := f :: !worklist) "cat-file";
-  match find_repo () with
+  match !repo with
   | Some dir -> (
     set_repo_dir dir;
     let find_func =
