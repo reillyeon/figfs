@@ -1,5 +1,5 @@
 (* Object types and parser.
- * Copyright (C) 2008 Reilly Grant
+ * Copyright (C) 2008-2009 Reilly Grant
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -188,7 +188,7 @@ let rec parse_tree (data:string) : (int * string * hash) list =
     (perms, name, hash) :: parse_tree (String.sub data (null_index + 21)
                                          (data_length - null_index - 21))
 
-let read_obj (h:hash) (typ:obj_type) (data:string) : obj =
+let parse_obj (h:hash) (typ:obj_type) (data:string) : obj =
   match typ with
   | TCommit ->
       let tree, parents, author, committer, message = parse_commit data in

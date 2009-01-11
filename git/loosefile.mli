@@ -1,5 +1,5 @@
 (* Git object database loose files.
- * Copyright (C) 2008 Reilly Grant
+ * Copyright (C) 2008-2009 Reilly Grant
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,6 +18,8 @@
 
 val find_loose_file : Object.hash -> string
 
-val stat_loose_file : Object.hash -> Object.obj_stat
+val find_object_raw : Object.hash -> Object.obj_stat * string
 
-val read_loose_file : Object.hash -> Object.obj
+val stat_object : Object.hash -> Object.obj_stat
+
+val find_object : Object.hash -> Object.obj

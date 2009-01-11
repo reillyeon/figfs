@@ -1,5 +1,5 @@
 (* Loose object file reader.
- * Copyright (C) 2008 Reilly Grant
+ * Copyright (C) 2008-2009 Reilly Grant
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -24,7 +24,7 @@ let find_loose_file (hash:hash) : string =
   let suffix = String.sub hash 2 (String.length hash - 2) in
   List.fold_left Filename.concat (get_repo_dir ()) ["objects"; prefix; suffix]
 
-let internal_read_loose_file (hash:hash) : obj_stat * string =
+let find_object_raw (hash:hash) : obj_stat * string =
   let path = find_loose_file hash in
   let file = open_in_bin path in
   let file_size = in_channel_length file in
@@ -40,10 +40,10 @@ let internal_read_loose_file (hash:hash) : obj_stat * string =
   let data = String.sub inflated_data (null_index + 1) size in
   ( { os_hash = hash; os_type = typ; os_size = size }, data )
 
-let stat_loose_file (hash:hash) : obj_stat =
-  let stat, _ = internal_read_loose_file hash in
+let stat_object (hash:hash) : obj_stat =
+  let stat, _ = find_object_raw hash in
   stat
 
-let read_loose_file (hash:hash) : obj =
-  let stat, data = internal_read_loose_file hash in
-  read_obj hash stat.os_type data
+let find_object (hash:hash) : obj =
+  let stat, data = find_object_raw hash in
+  parse_obj hash stat.os_type data

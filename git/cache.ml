@@ -1,5 +1,5 @@
 (* Data caching.
- * Copyright (C) 2008 Reilly Grant
+ * Copyright (C) 2008-2009 Reilly Grant
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -22,14 +22,18 @@ let object_cache : (hash, obj) Hashtbl.t = Hashtbl.create 8
 
 let stat_cache : (hash, obj_stat) Hashtbl.t = Hashtbl.create 8
 
-let find_cached_object (h:hash) : obj =
+let find_object (h:hash) : obj =
   Hashtbl.find object_cache h
 
-let cache_object (o:obj) : unit =
+let add_object (o:obj) : unit =
   Hashtbl.add object_cache (hash_of_obj o) o
 
-let find_cached_stat (h:hash) : obj_stat =
+let stat_object (h:hash) : obj_stat =
   Hashtbl.find stat_cache h
 
-let cache_stat (os:obj_stat) : unit =
+let add_stat (os:obj_stat) : unit =
   Hashtbl.add stat_cache os.os_hash os
+
+let clear () : unit =
+  Hashtbl.clear object_cache;
+  Hashtbl.clear stat_cache

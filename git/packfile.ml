@@ -135,3 +135,27 @@ let scan_index (pack:string) (hash:hash) : int64 =
       scan_indexv1 fd hash
     )
   ) with e -> close fd; raise e
+
+let find_object_raw_in_pack (pack:string) (hash:hash) : obj_stat * string =
+  let offset = scan_index pack hash in
+  ignore offset; failwith "find_object_raw_in_pack"
+
+let find_object_raw (hash:hash) : obj_stat * string =
+  let packs = enumerate_packs () in
+  let data = List.fold_left (fun data pack ->
+    try (
+      if (data = None)
+      then Some (find_object_raw_in_pack pack hash)
+      else data
+    ) with Not_found -> None) None packs in
+  match data with
+  | Some data -> data
+  | None -> raise Not_found
+
+let stat_object (hash:hash) : obj_stat =
+  let stat, _ = find_object_raw hash in
+  stat
+
+let find_object (hash:hash) : obj =
+  let stat, data = find_object_raw hash in
+  parse_obj hash stat.os_type data

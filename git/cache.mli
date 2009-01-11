@@ -1,5 +1,5 @@
 (* Data caching.
- * Copyright (C) 2008 Reilly Grant
+ * Copyright (C) 2008-2009 Reilly Grant
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -16,10 +16,12 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  *)
 
-val find_cached_object : Object.hash -> Object.obj
+val find_object : Object.hash -> Object.obj
 
-val cache_object : Object.obj -> unit
+val add_object : Object.obj -> unit
 
-val find_cached_stat : Object.hash -> Object.obj_stat
+val stat_object : Object.hash -> Object.obj_stat
 
-val cache_stat : Object.obj_stat -> unit
+val add_stat : Object.obj_stat -> unit
+
+val clear : unit -> unit

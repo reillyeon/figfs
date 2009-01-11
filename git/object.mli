@@ -1,5 +1,5 @@
 (* Object types and parser.
- * Copyright (C) 2008 Reilly Grant
+ * Copyright (C) 2008-2009 Reilly Grant
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -86,4 +86,4 @@ val hash_of_obj : obj -> hash
 
 val type_of_obj : obj -> obj_type
 
-val read_obj : hash -> obj_type -> string -> obj
+val parse_obj : hash -> obj_type -> string -> obj

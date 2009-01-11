@@ -1,5 +1,5 @@
 (* Object manager.
- * Copyright (C) 2008 Reilly Grant
+ * Copyright (C) 2008-2009 Reilly Grant
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,29 +18,23 @@
 
 open Repository
 open Object
-open Cache
-open Loosefile
 
 let find_object (h:hash) : obj =
-  try find_cached_object h
+  try Cache.find_object h
   with Not_found ->
     let objekt =
-      let loosefile_path = find_loose_file h in
-      if Sys.file_exists loosefile_path
-      then read_loose_file h
-      else raise Not_found in
-    cache_object objekt;
+      try Loosefile.find_object h
+      with Not_found -> Packfile.find_object h in
+    Cache.add_object objekt;
     objekt
 
 let stat_object (h:hash) : obj_stat =
-  try find_cached_stat h
+  try Cache.stat_object h
   with Not_found ->
     let stat =
-      let loosefile_path = find_loose_file h in
-      if Sys.file_exists loosefile_path
-      then stat_loose_file h
-      else raise Not_found in
-    cache_stat stat;
+      try Loosefile.stat_object h
+      with Not_found -> Packfile.stat_object h in
+    Cache.add_stat stat;
     stat
 
 let traverse_tree (h:hash) (path:string) : obj =

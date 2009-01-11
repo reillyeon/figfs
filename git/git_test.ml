@@ -1,5 +1,5 @@
 (* Git library unit tests.
- * Copyright (C) 2008 Reilly Grant
+ * Copyright (C) 2008-2009 Reilly Grant
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -97,8 +97,7 @@ let tag0 = Tag {
 (* Loose object test files. *)
 
 let loosefile_test (e:obj) () =
-  Repository.set_repo_dir "test_repo1";
-  let v = Loosefile.read_loose_file (hash_of_obj e) in
+  let v = Loosefile.find_object (hash_of_obj e) in
   assert_equal v e
 
 let loosefile_tests = "loosefile tests" >::: [
@@ -122,17 +121,14 @@ let loosefile_tests = "loosefile tests" >::: [
 let test_repo2_pack = "a99efc8d8a02bb9155dce1bfb6d3583ac023fe33"
 
 let enumerate_packs_test () =
-  Repository.set_repo_dir "test_repo2";
   let v = Packfile.enumerate_packs () in
   assert_equal v [test_repo2_pack]
 
 let scan_index_test (h:hash) (expected:int64) () =
-  Repository.set_repo_dir "test_repo2";
   let v = Packfile.scan_index test_repo2_pack h
   in assert_equal v expected
 
 let scan_index_fail_test (h:hash) () =
-  Repository.set_repo_dir "test_repo2";
   assert_raises Not_found (fun () -> Packfile.scan_index test_repo2_pack h)
 
 let packfile_tests = "pack file tests" >::: [
@@ -159,12 +155,10 @@ let packfile_tests = "pack file tests" >::: [
 (* Tree traversal tests. *)
 
 let tree_traverse_test (c:hash) (p:string) (e:obj) () =
-  Repository.set_repo_dir "test_repo1";
   let v = Manager.traverse_tree c p in
   assert_equal v e
 
 let tree_traverse_fail_test (c:hash) (p:string) () =
-  Repository.set_repo_dir "test_repo1";
   assert_raises Not_found (fun _ -> Manager.traverse_tree c p)
 
 let tree_traverse_tests = "tree traversal tests" >::: [
@@ -181,11 +175,21 @@ let tree_traverse_tests = "tree traversal tests" >::: [
   "fail3" >:: tree_traverse_fail_test (hash_of_obj commit3) "/e/f"
 ]
 
+let change_repo (dir:string) () : unit =
+  Repository.set_repo_dir dir;
+  Cache.clear ()
+
 let all_tests = "all tests" >::: [
+  "set test_repo1" >:: change_repo "test_repo1";
   loosefile_tests;
+  "set test_repo2" >:: change_repo "test_repo2";
   packfile_tests;
-  tree_traverse_tests
+  "set test_repo1" >:: change_repo "test_repo1";
+  tree_traverse_tests;
+(* "set test_repo2" >:: change_repo "test_repo2";
+   tree_traverse_tests *)
 ]
 
 let _ =
-  run_test_tt all_tests
+  run_test_tt all_tests;
+

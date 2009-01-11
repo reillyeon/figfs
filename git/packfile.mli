@@ -31,3 +31,9 @@ val pack_path : string -> string
 (* Scan the given pack index for an object.  Result is the offset in the pack
  * file. *)
 val scan_index : string -> Object.hash -> int64
+
+val find_object_raw : Object.hash -> Object.obj_stat * string
+
+val find_object : Object.hash -> Object.obj
+
+val stat_object : Object.hash -> Object.obj_stat
