@@ -65,6 +65,7 @@ let patch (base:string) (diff:string) : string =
         cp_size := !cp_size lor (int_of_char (String.get diff !diff_pos) lsl 16);
         incr diff_pos
       );
+      if !cp_size = 0 then cp_size := 0x10000;
       if !cp_off < 0 || !cp_off + !cp_size > base_size
       then failwith "Source copy command out of bounds."
       else (
