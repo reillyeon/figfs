@@ -88,22 +88,33 @@ let figfs_read (path:string) (buf:Fuse.buffer) (off:int64) (fd:int) : int =
     let file = traverse_tree !root_commit path in
     match file with
     | Blob b ->
-      if offset >= (String.length b.b_data)
+      if offset < 0 || offset >= (String.length b.b_data)
       then raise (Unix.Unix_error (Unix.EINVAL, "read", path))
       else
-        let read = string_to_buffer_blit 
-            (String.sub b.b_data offset (String.length b.b_data)) buf in
+        let to_read = min (String.length b.b_data - offset)
+            (Bigarray.Array1.dim buf) in
+        let read = string_to_buffer_blit
+            (String.sub b.b_data offset to_read) buf in
         if read = -1
         then failwith "size mismatch"
         else read
     | _ -> raise (Unix.Unix_error (Unix.EISDIR, "read", path))
   with Not_found -> raise (Unix.Unix_error (Unix.ENOENT, "read", path))
 
+let figfs_readlink (path:string) : string =
+  try
+    let file = traverse_tree !root_commit path in
+    match file with
+    | Blob b -> b.b_data
+    | _ -> raise (Unix.Unix_error (Unix.EINVAL, "readlink", path))
+  with Not_found -> raise (Unix.Unix_error (Unix.ENOENT, "readlink", path))
+
 let operations : Fuse.operations = {
   Fuse.default_operations with
   Fuse.getattr = figfs_getattr;
   Fuse.readdir = figfs_readdir;
-  Fuse.read = figfs_read 
+  Fuse.read = figfs_read;
+  Fuse.readlink = figfs_readlink
 }
 
 let make_absolute path =

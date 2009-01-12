@@ -17,7 +17,7 @@
 BYTE_ENABLED = true
 NATIVE_ENABLED = false
 
-CFLAGS += -fPIC
+CFLAGS += -fPIC -g
 
 C_OBJECTS = zlibstub.o
 

@@ -43,7 +43,7 @@ OCAMLPACKS[] =
    unix
    oUnit
 
-OCamlProgram(cat-file, cat-file)
+OCamlProgram(cat-file, cat_file)
 OCamlProgram(git_test, git_test)
 
 .DEFAULT: $(if $(BYTE_ENABLED), git.cma) \

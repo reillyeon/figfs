@@ -22,10 +22,12 @@ open Object
 let find_object (h:hash) : obj =
   try Cache.find_object h
   with Not_found ->
-    let objekt =
-      try Loosefile.find_object h
-      with Not_found -> Packfile.find_object h in
+    let stat, data =
+      try Loosefile.find_object_raw h
+      with Not_found -> Packfile.find_object_raw h in
+    let objekt = parse_obj stat.os_hash stat.os_type data in
     Cache.add_object objekt;
+    Cache.add_stat stat;
     objekt
 
 let stat_object (h:hash) : obj_stat =
