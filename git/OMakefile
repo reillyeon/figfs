@@ -19,8 +19,8 @@
 NATIVE_ENABLED = false
 BYTE_ENABLED = true
 
-OCAMLINCLUDES += ../zlib
-OCAML_LIBS += ../zlib/zlib
+OCAMLINCLUDES +=
+OCAML_LIBS +=
 
 FILES[] =
 	loosefile
@@ -40,8 +40,9 @@ OCAML_LIBS += git
 USE_OCAMLFIND = true
 
 OCAMLPACKS[] =
-   unix
-   oUnit
+	unix
+	oUnit
+	camlzip
 
 OCamlProgram(cat-file, cat_file)
 OCamlProgram(git_test, git_test)

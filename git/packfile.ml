@@ -141,13 +141,7 @@ let scan_index (pack:string) (hash:hash) : int64 =
  * of the compressed data. *)
 let unpack_compressed_object (stat:obj_stat) (fd:file_descr)
     : obj_stat * string =
-  if stat.os_size <> 0
-  then (
-    let compressed_size = stat.os_size + 8 in (* zlib smallest possible *)
-    let compressed_data = String.create compressed_size in
-    ignore (read fd compressed_data 0 compressed_size);
-    stat, (Zlib.inflate compressed_data stat.os_size)
-  ) else stat, ""
+   stat, inflate_file fd
 
 (* Read an object from the pack, expects fd to already be seeked to offset. *)
 let rec unpack_object (hash:hash) (offset:int64) (fd:file_descr)
@@ -180,10 +174,7 @@ and unpack_ofs_delta_object (offset:int64) (stat:obj_stat) (fd:file_descr)
     Int64.sub offset (Int64.of_int (int_of_offsetint offset_buf)) in
   let data_pos = index_with offset_buf is_seven_bit + 1 - 20 in
   ignore (LargeFile.lseek fd (Int64.of_int data_pos) SEEK_CUR);
-  let compressed_size = stat.os_size + 8 in (* zlib smallest possible *)
-  let compressed_patch = String.create compressed_size in
-  ignore (read fd compressed_patch 0 compressed_size);
-  let patch = Zlib.inflate compressed_patch stat.os_size in
+  let patch = inflate_file fd in
   ignore (LargeFile.lseek fd base_offset SEEK_SET);
   let base_stat, base =
     unpack_object "0000000000000000000000000000000000000000" base_offset fd in
@@ -199,10 +190,7 @@ and unpack_ref_delta_object (stat:obj_stat) (fd:file_descr)
   let base_hash = String.create 20 in
   ignore (read fd base_hash 0 20);
   let base_stat, base = find_object_raw (base16_of_base256 base_hash) in
-  let compressed_size = stat.os_size + 8 in (* zlib smallest possible *)
-  let compressed_patch = String.create compressed_size in
-  ignore (read fd compressed_patch 0 compressed_size);
-  let patch = Zlib.inflate compressed_patch stat.os_size in
+  let patch = inflate_file fd in
   let data = Delta.patch base patch in
   { stat with
     os_size = String.length data;
@@ -229,7 +217,9 @@ and find_object_raw (hash:hash) : obj_stat * string =
       else data
     ) with Not_found -> None) None packs in
   match data with
-  | Some data -> data
+  | Some data ->
+      (* print_endline (String.escaped (snd data)); *)
+      data
   | None -> raise Not_found
 
 let stat_object (hash:hash) : obj_stat =

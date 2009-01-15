@@ -138,3 +138,10 @@ let decode_int64 (buf:string) : int64 =
 
 let is_seven_bit (c:char) : bool =
   int_of_char c land 0x80 = 0
+
+let inflate_file (fd:Unix.file_descr) : string =
+  let fill buffer = Unix.read fd buffer 0 (String.length buffer) in
+  let out_buf = Buffer.create 1024 in
+  let flush buffer len = Buffer.add_substring out_buf buffer 0 len in
+  Zlib.uncompress fill flush;
+  Buffer.contents out_buf

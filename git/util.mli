@@ -56,3 +56,7 @@ val decode_int32 : string -> int32
 val decode_int64 : string -> int64
 
 val is_seven_bit : char -> bool
+
+(* Decompress the data available from the given file descriptor.  Continues
+ * until zlib detects the end of the stream. *)
+val inflate_file : Unix.file_descr -> string

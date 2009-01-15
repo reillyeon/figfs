@@ -16,4 +16,4 @@
 
 .PHONY: all clean test
 
-.SUBDIRS: zlib fuse git figfs
+.SUBDIRS: fuse git figfs

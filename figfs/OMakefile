@@ -19,8 +19,8 @@
 NATIVE_ENABLED = false
 BYTE_ENABLED = true
 
-OCAMLINCLUDES += ../zlib ../git ../fuse
-OCAML_LIBS += ../zlib/zlib ../git/git ../fuse/fuse
+OCAMLINCLUDES += ../git ../fuse
+OCAML_LIBS += ../git/git ../fuse/fuse
 OCAMLFLAGS += -thread
 
 FILES[] =
@@ -32,6 +32,7 @@ OCAMLPACKS[] =
 	unix
 	threads
 	bigarray
+	camlzip
 
 OCamlProgram(figfs, $(FILES))
 
