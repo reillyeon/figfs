@@ -119,6 +119,17 @@ let refs_test (e:obj_ref list) () =
   let refs = Refs.all () in
   assert_equal refs e
 
+let ref_test (ref:string) (e:obj_ref) () =
+  let v = Refs.lookup ref in
+  assert_equal v e
+
+let refs_tests = "reference tests" >::: [
+  "HEAD" >:: ref_test "HEAD"
+              { r_name = "refs/heads/master";
+                r_target = "20bedc9d11bdbfdb473bbfa1c43a6c6f8fd06853";
+                r_peeled = None };
+]
+
 let object_test (e:obj) () =
   let v = Manager.find_object (hash_of_obj e) in
   if v <> e
@@ -203,6 +214,7 @@ let packfile_tests = "pack file tests" >::: [
   "fail5" >:: scan_index_fail_test "ffffffffffffffffffffffffffffffffffffffff";
   "refs" >:: refs_test refs_packed;
   object_tests;
+  refs_tests;
   tree_traverse_tests;
 ]
 
@@ -210,6 +222,7 @@ let loosefile_tests = "loose file test" >::: [
   "set test_repo1" >:: change_repo "test_repo1";
   "refs" >:: refs_test refs_loose;
   object_tests;
+  refs_tests;
   tree_traverse_tests
 ]
 

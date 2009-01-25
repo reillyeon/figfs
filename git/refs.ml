@@ -97,7 +97,7 @@ let get_packed_ref (ref:string) : obj_ref =
   refresh_packed_refs ();
   Hashtbl.find packed_ref_cache ref
 
-let get_loose_ref (ref:string) : obj_ref =
+let rec get_loose_ref (ref:string) : obj_ref =
   let ref_path = Filename.concat (get_repo_dir ()) ref in
   if not (Sys.file_exists ref_path)
   then raise Not_found
@@ -108,14 +108,14 @@ let get_loose_ref (ref:string) : obj_ref =
     close_in fin;
     if starts_with "ref: " buf then (
       let ref = String.sub buf 5 (String.length buf - 6) in
-      get_packed_ref ref
+      lookup ref
     ) else if String.length buf = 41 then (
       let hash = String.sub buf 0 (String.length buf - 1) in
       { r_name = ref; r_target = hash; r_peeled = None }
     ) else raise Not_found
   )
 
-let lookup (ref:string) : obj_ref =
+and lookup (ref:string) : obj_ref =
   try get_packed_ref ref
   with Not_found -> get_loose_ref ref
 
