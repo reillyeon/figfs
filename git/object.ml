@@ -97,7 +97,7 @@ type blob = {
   }
 
 let string_of_blob blob : string =
-  Printf.sprintf "Blob %s {\n%s\n}" blob.b_hash blob.b_data
+  Printf.sprintf "Blob: %s\n\n%s" blob.b_hash blob.b_data
 
 type tag = {
     g_hash : hash; (* Hash of this tag. *)
@@ -109,7 +109,7 @@ type tag = {
   }
 
 let string_of_tag tag : string =
-  Printf.sprintf "Tag %s : %s {\nObject: %s\nType: %s\nTagger: %s\n\n%s\n}"
+  Printf.sprintf "Tag: %s (%s)\nObject: %s (%s)\nTagger: %s\n\n%s"
     tag.g_name tag.g_hash tag.g_object (string_of_obj_type tag.g_type)
     tag.g_tagger tag.g_message
 
