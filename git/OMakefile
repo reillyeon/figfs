@@ -32,6 +32,7 @@ FILES[] =
 	cache
 	delta
 	packfile
+	refs
 
 OCamlLibrary(git, $(FILES))
 

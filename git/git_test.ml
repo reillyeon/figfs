@@ -18,6 +18,7 @@
 
 open OUnit
 open Object
+open Refs
 
 let change_repo (dir:string) () : unit =
   Repository.set_repo_dir dir;
@@ -97,6 +98,26 @@ let tag0 = Tag {
   g_name = "tag0";
   g_tagger = "Reilly Grant <reillyeon@qotw.net> 1231637882 -0500";
   g_message = "This is a tag.\n" }
+
+let refs_loose =
+  [{ r_name = "refs/heads/master";
+     r_target = "20bedc9d11bdbfdb473bbfa1c43a6c6f8fd06853";
+     r_peeled = None };
+   { r_name = "refs/tags/tag0";
+     r_target = "db7471e7aa23b42e59f4363bab8c00568b58ad5c";
+     r_peeled = None }]
+
+let refs_packed =
+  [{ r_name = "refs/tags/tag0";
+     r_target = "db7471e7aa23b42e59f4363bab8c00568b58ad5c";
+     r_peeled = Some "96828b6633da42da034196d12af3fe4332b4b347" };
+   { r_name = "refs/heads/master";
+     r_target = "20bedc9d11bdbfdb473bbfa1c43a6c6f8fd06853";
+     r_peeled = None }]
+
+let refs_test (e:obj_ref list) () =
+  let refs = Refs.all () in
+  assert_equal refs e
 
 let object_test (e:obj) () =
   let v = Manager.find_object (hash_of_obj e) in
@@ -180,12 +201,14 @@ let packfile_tests = "pack file tests" >::: [
   "fail3" >:: scan_index_fail_test "2c1d0e7302ad98e2a6b3da8fcc60e84b40522b8f";
   "fail4" >:: scan_index_fail_test "d4c4445ef1c52236f14ed9a36a97a5404727240c";
   "fail5" >:: scan_index_fail_test "ffffffffffffffffffffffffffffffffffffffff";
+  "refs" >:: refs_test refs_packed;
   object_tests;
   tree_traverse_tests;
 ]
 
 let loosefile_tests = "loose file test" >::: [
   "set test_repo1" >:: change_repo "test_repo1";
+  "refs" >:: refs_test refs_loose;
   object_tests;
   tree_traverse_tests
 ]
