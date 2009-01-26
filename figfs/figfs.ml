@@ -74,13 +74,13 @@ let figfs_readdir (path:string) (fd:int) : string list =
   in "." :: ".." :: entries
 
 (* Copies the contents of the given string into the given buffer, returning
- * the number of bytes copied, or -1 if there is a size error. *)
-let string_to_buffer_blit (s:string) (b:Fuse.buffer) : int =
-  let pos = ref 0 in
-  String.iter (fun c ->
-    Bigarray.Array1.set b !pos c;
-    pos := !pos + 1) s;
-  String.length s
+ * the number of bytes copied. *)
+let string_to_buffer_blit (str:string) (start:int) (len:int) (buf:Fuse.buffer)
+    : int =
+  for i = start to (start + len - 1) do
+    Bigarray.Array1.set buf (i - start) (String.get str i)
+  done;
+  len
 
 let figfs_read (path:string) (buf:Fuse.buffer) (off:int64) (fd:int) : int =
   let offset = Int64.to_int off in
@@ -91,13 +91,9 @@ let figfs_read (path:string) (buf:Fuse.buffer) (off:int64) (fd:int) : int =
       if offset < 0 || offset >= (String.length b.b_data)
       then raise (Unix.Unix_error (Unix.EINVAL, "read", path))
       else
-        let to_read = min (String.length b.b_data - offset)
-            (Bigarray.Array1.dim buf) in
-        let read = string_to_buffer_blit
-            (String.sub b.b_data offset to_read) buf in
-        if read = -1
-        then failwith "size mismatch"
-        else read
+        let to_read =
+          min (String.length b.b_data - offset) (Bigarray.Array1.dim buf) in
+        string_to_buffer_blit b.b_data offset to_read buf
     | _ -> raise (Unix.Unix_error (Unix.EISDIR, "read", path))
   with Not_found -> raise (Unix.Unix_error (Unix.ENOENT, "read", path))
 
