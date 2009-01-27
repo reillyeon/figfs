@@ -121,9 +121,36 @@ let make_absolute path =
   then Printf.sprintf "%s/%s" (Sys.getcwd ()) path
   else path
 
+let repo_dir = ref (find_repo ())
+
+let fuse_opts = ref []
+
+let argspec =
+  [("-r", Arg.String (fun s -> repo_dir := Some (make_absolute s)),
+      "repository path");
+     ("-c", Arg.Set_string root_commit,
+      "root commit");
+     ("-d", Arg.Unit (fun () -> fuse_opts := "-d" :: !fuse_opts),
+      "debug output (implies -f)");
+     ("-f", Arg.Unit (fun () -> fuse_opts := "-f" :: !fuse_opts),
+      "foreground operation");
+     ("-s", Arg.Unit (fun () -> fuse_opts := "-s" :: !fuse_opts),
+      "disable-multithreaded operation");
+     ("-o", Arg.String (fun s ->
+       fuse_opts := Printf.sprintf "-o %s" s :: !fuse_opts),
+      "Fuse options.")]
+
+let argrest s =
+  fuse_opts := s :: !fuse_opts
+
+let argusage = "usage: figfs [options] mountpoint"
+
 let _ =
-  set_repo_dir (make_absolute Sys.argv.(1));
-  root_commit := Sys.argv.(2);
-  let args = Array.copy Sys.argv in
-  Array.blit args 3 args 1 (Array.length args - 3);
-  Fuse.main (Array.sub args 0 (Array.length args - 2)) operations
+  Arg.parse argspec argrest argusage;
+  match !repo_dir with
+  | Some dir -> (
+      set_repo_dir dir;
+      let args = Array.of_list ("figfs" :: List.rev !fuse_opts) in
+      Fuse.main args operations
+    )
+  | None -> Printf.eprintf "No repository found.\n"
