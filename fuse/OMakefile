@@ -59,6 +59,7 @@ FILES = $(OCAML_OBJECTS) Fuse_bindings_stubs Fuse_util Unix_util_stubs fusexmp
 
 clean:
 	rm -f dllfuse.so libfusestub.a fusexmp
+	rm -f fuse.cma fuse.cmxa fuse.a
 	rm -f $(filter-proper-targets $(glob $(addsuffix .*, $(FILES))))
 
 USE_OCAMLFIND = true
