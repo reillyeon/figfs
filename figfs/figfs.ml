@@ -96,8 +96,6 @@ let tag_getattr (path:string) : Unix.LargeFile.stats =
   with Not_found -> raise (Unix.Unix_error (Unix.ENOENT, "getattr", path))
 
 let figfs_getattr (path:string) : Unix.LargeFile.stats =
-  Printf.printf "getattr(%s)\n" path;
-  flush Pervasives.stdout;
   if starts_with "/commit/" path && String.length path >= 48 then
     commit_getattr path
   else if starts_with "/tag/" path && String.length path > 5 then
@@ -132,8 +130,6 @@ let tag_readdir () : string list =
   "." :: ".." :: tag_names
 
 let figfs_readdir (path:string) (fd:int) : string list =
-  Printf.printf "readdir(%s)\n" path;
-  flush Pervasives.stdout;
   if starts_with "/commit/" path && String.length path >= 48 then
     commit_readdir path
   else if "/tag" = path then
@@ -198,8 +194,6 @@ let tag_readlink (path:string) : string =
   with Not_found -> raise (Unix.Unix_error (Unix.ENOENT, "readlink", path))
 
 let figfs_readlink (path:string) : string =
-  Printf.printf "readlink(%s)\n" path;
-  flush Pervasives.stdout;
   if starts_with "/commit/" path && String.length path >= 48 then
     commit_readlink path
   else if starts_with "/tag/" path && String.length path > 5 then
