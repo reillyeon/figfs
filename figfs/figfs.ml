@@ -19,10 +19,10 @@
 open Repository
 open Manager
 open Object
+open Util
+
 open Unix
 open Unix.LargeFile
-
-let root_commit = ref ""
 
 let base_stat = {
   st_dev = 0;
@@ -39,39 +39,74 @@ let base_stat = {
   st_ctime = Unix.time ()
 }
 
-let figfs_getattr (path:string) : Unix.LargeFile.stats =
-  if path = "/"
-  then { base_stat with
-         st_kind = Unix.S_DIR;
-         st_perm = 0o755 }
+let commit_README = String.concat "\n" [
+  "This directory appears empty, but directories within it exist if the given";
+  "commit exists."; ""]
+
+let parse_commit_path (path:string) : string * string =
+  let commit = String.sub path 8 40 in
+  let remaining_path = String.sub path 48 (String.length path - 48) in
+  commit, remaining_path
+
+let commit_getattr (path:string) : Unix.LargeFile.stats =
+  let commit, remaining_path = parse_commit_path path in
+  if remaining_path = "" || remaining_path = "/" then
+    { base_stat with
+      st_kind = Unix.S_DIR;
+      st_perm = 0o755 }
   else try (
-    let dir = traverse_tree !root_commit (Filename.dirname path) in
+    let dir = traverse_tree commit (Filename.dirname remaining_path) in
     match dir with
     | Tree t ->
-      let (perms,_,file_hash) =
-        List.find (fun (_,n,_) -> n = (Filename.basename path)) t.t_dirents in
-      let file_stat = stat_object file_hash in
-      let kind =
-        match file_stat.os_type with
-        | TTree -> Unix.S_DIR
-        | TBlob -> Unix.S_REG
-        | _ -> failwith "Getattr of commit?" in
-      { base_stat with
-        st_kind = kind;
-        st_perm = if file_stat.os_type = TBlob then perms else 0o755;
-        st_size = Int64.of_int file_stat.os_size }
+        let (perms,_,file_hash) = List.find (fun (_,n,_) -> n =
+          (Filename.basename remaining_path)) t.t_dirents in
+        let file_stat = stat_object file_hash in
+        let kind =
+          match file_stat.os_type with
+          | TTree -> Unix.S_DIR
+          | TBlob -> Unix.S_REG
+          | _ -> failwith "Getattr of commit?" in
+        { base_stat with
+          st_kind = kind;
+          st_perm = if file_stat.os_type = TBlob then perms else 0o755;
+          st_size = Int64.of_int file_stat.os_size }
     | _ -> failwith "Parent object not directory?"
-  ) with Not_found -> raise (Unix.Unix_error (Unix.ENOENT, "getattr", path))
+   ) with Not_found -> raise (Unix.Unix_error (Unix.ENOENT, "getattr", path))
 
-let figfs_readdir (path:string) (fd:int) : string list =
+let figfs_getattr (path:string) : Unix.LargeFile.stats =
+  if starts_with "/commit/" path && String.length path >= 48 then
+    commit_getattr path
+  else if "/commit" = path or "/" = path then
+    { base_stat with
+      st_kind = Unix.S_DIR;
+      st_perm = 0o755 }
+  else if "/commit/README" = path then
+    { base_stat with
+      st_size = Int64.of_int (String.length commit_README) }
+  else
+    raise (Unix.Unix_error (Unix.ENOENT, "getattr", path))
+
+let commit_readdir (path:string) (fd:int) : string list =
+  let commit, remaining_path = parse_commit_path path in
   let entries =
     try
-      let dir = traverse_tree !root_commit path in
+      let dir = traverse_tree commit remaining_path in
       match dir with
       | Tree t -> List.map (fun (_,n,_) -> n) t.t_dirents
       | _ -> raise (Unix.Unix_error (Unix.ENOTDIR, "readdir", path))
     with Not_found -> raise (Unix.Unix_error (Unix.ENOENT, "readdir", path))
   in "." :: ".." :: entries
+
+let figfs_readdir (path:string) (fd:int) : string list =
+  if starts_with "/commit/" path && String.length path >= 48 then (
+    commit_readdir path fd
+  ) else if "/commit" = path then (
+    ["."; ".."; "README"]
+  ) else if "/" = path then (
+    ["."; ".."; "commit"]
+  ) else (
+    raise (Unix.Unix_error (Unix.ENOENT, "readdir", path))
+  )
 
 (* Copies the contents of the given string into the given buffer, returning
  * the number of bytes copied. *)
@@ -82,28 +117,48 @@ let string_to_buffer_blit (str:string) (start:int) (len:int) (buf:Fuse.buffer)
   done;
   len
 
-let figfs_read (path:string) (buf:Fuse.buffer) (off:int64) (fd:int) : int =
+let static_read (path:string) (data:string) (buf:Fuse.buffer) (off:int64)
+    : int =
   let offset = Int64.to_int off in
+  if offset < 0 || offset >= (String.length data)
+  then raise (Unix.Unix_error (Unix.EINVAL, "read", path))
+  else
+    let to_read =
+      min (String.length data - offset) (Bigarray.Array1.dim buf) in
+    string_to_buffer_blit data offset to_read buf
+
+let commit_read (path:string) (buf:Fuse.buffer) (off:int64) : int =
+  let commit, remaining_path = parse_commit_path path in
   try
-    let file = traverse_tree !root_commit path in
+    let file = traverse_tree commit remaining_path in
     match file with
-    | Blob b ->
-      if offset < 0 || offset >= (String.length b.b_data)
-      then raise (Unix.Unix_error (Unix.EINVAL, "read", path))
-      else
-        let to_read =
-          min (String.length b.b_data - offset) (Bigarray.Array1.dim buf) in
-        string_to_buffer_blit b.b_data offset to_read buf
+    | Blob b -> static_read path b.b_data buf off
     | _ -> raise (Unix.Unix_error (Unix.EISDIR, "read", path))
   with Not_found -> raise (Unix.Unix_error (Unix.ENOENT, "read", path))
 
-let figfs_readlink (path:string) : string =
+let figfs_read (path:string) (buf:Fuse.buffer) (off:int64) (fd:int) : int =
+  if starts_with "/commit/" path && String.length path >= 48 then
+    commit_read path buf off
+  else if "/commit/README" = path then
+    static_read path commit_README buf off
+  else
+    raise (Unix.Unix_error (Unix.ENOENT, "read", path))
+
+let commit_readlink (path:string) : string =
+  let commit, remaining_path = parse_commit_path path in
   try
-    let file = traverse_tree !root_commit path in
+    let file = traverse_tree commit remaining_path in
     match file with
     | Blob b -> b.b_data
     | _ -> raise (Unix.Unix_error (Unix.EINVAL, "readlink", path))
   with Not_found -> raise (Unix.Unix_error (Unix.ENOENT, "readlink", path))
+
+let figfs_readlink (path:string) : string =
+  if starts_with "/commit/" path && String.length path >= 48 then (
+    commit_readlink path
+  ) else (
+    raise (Unix.Unix_error (Unix.ENOENT, "readlink", path))
+  )
 
 let operations : Fuse.operations = {
   Fuse.default_operations with
@@ -128,8 +183,6 @@ let fuse_opts = ref []
 let argspec =
   [("-r", Arg.String (fun s -> repo_dir := Some (make_absolute s)),
       "repository path");
-     ("-c", Arg.Set_string root_commit,
-      "root commit");
      ("-d", Arg.Unit (fun () -> fuse_opts := "-d" :: !fuse_opts),
       "debug output (implies -f)");
      ("-f", Arg.Unit (fun () -> fuse_opts := "-f" :: !fuse_opts),
