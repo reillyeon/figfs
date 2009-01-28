@@ -19,6 +19,7 @@
 open Repository
 open Manager
 open Object
+open Refs
 open Util
 
 open Unix
@@ -43,10 +44,21 @@ let commit_README = String.concat "\n" [
   "This directory appears empty, but directories within it exist if the given";
   "commit exists."; ""]
 
+(* Commit paths are of the form /commit/<hash>/remaining_path *)
 let parse_commit_path (path:string) : string * string =
   let commit = String.sub path 8 40 in
   let remaining_path = String.sub path 48 (String.length path - 48) in
   commit, remaining_path
+
+(* Tag paths are of the form /tag/<tag>/remaining_path *)
+let parse_tag_path (path:string) : string * string =
+  let tag_index =
+    try String.index_from path 5 '/' - 1
+    with Not_found -> String.length path - 1 in
+  let tag = String.sub path 5 (tag_index - 4) in
+  let remaining_path = String.sub path (tag_index + 1)
+      (String.length path - tag_index - 1) in
+  tag, remaining_path
 
 let commit_getattr (path:string) : Unix.LargeFile.stats =
   let commit, remaining_path = parse_commit_path path in
@@ -73,10 +85,24 @@ let commit_getattr (path:string) : Unix.LargeFile.stats =
     | _ -> failwith "Parent object not directory?"
    ) with Not_found -> raise (Unix.Unix_error (Unix.ENOENT, "getattr", path))
 
+let tag_getattr (path:string) : Unix.LargeFile.stats =
+  let tag, _ = parse_tag_path path in
+  try
+    let ref = Refs.lookup (String.concat "/" ["refs"; "tags"; tag]) in
+    { base_stat with
+      st_kind = S_LNK;
+      st_perm = 0o777;
+      st_size = Int64.of_int (String.length ref.r_target + 10) }
+  with Not_found -> raise (Unix.Unix_error (Unix.ENOENT, "getattr", path))
+
 let figfs_getattr (path:string) : Unix.LargeFile.stats =
+  Printf.printf "getattr(%s)\n" path;
+  flush Pervasives.stdout;
   if starts_with "/commit/" path && String.length path >= 48 then
     commit_getattr path
-  else if "/commit" = path or "/" = path then
+  else if starts_with "/tag/" path && String.length path > 5 then
+    tag_getattr path
+  else if "/commit" = path || "/tag" = path || "/" = path then
     { base_stat with
       st_kind = Unix.S_DIR;
       st_perm = 0o755 }
@@ -86,7 +112,7 @@ let figfs_getattr (path:string) : Unix.LargeFile.stats =
   else
     raise (Unix.Unix_error (Unix.ENOENT, "getattr", path))
 
-let commit_readdir (path:string) (fd:int) : string list =
+let commit_readdir (path:string) : string list =
   let commit, remaining_path = parse_commit_path path in
   let entries =
     try
@@ -97,16 +123,27 @@ let commit_readdir (path:string) (fd:int) : string list =
     with Not_found -> raise (Unix.Unix_error (Unix.ENOENT, "readdir", path))
   in "." :: ".." :: entries
 
+let tag_readdir () : string list =
+  let refs = Refs.all () in
+  let ref_names = List.map (fun r -> r.r_name) refs in
+  let tag_refs = List.filter (fun s -> starts_with "refs/tags/" s) ref_names in
+  let tag_names = List.map (fun s -> String.sub s 10 (String.length s - 10))
+      tag_refs in
+  "." :: ".." :: tag_names
+
 let figfs_readdir (path:string) (fd:int) : string list =
-  if starts_with "/commit/" path && String.length path >= 48 then (
-    commit_readdir path fd
-  ) else if "/commit" = path then (
+  Printf.printf "readdir(%s)\n" path;
+  flush Pervasives.stdout;
+  if starts_with "/commit/" path && String.length path >= 48 then
+    commit_readdir path
+  else if "/tag" = path then
+    tag_readdir ()
+  else if "/commit" = path then
     ["."; ".."; "README"]
-  ) else if "/" = path then (
-    ["."; ".."; "commit"]
-  ) else (
+  else if "/" = path then
+    ["."; ".."; "commit"; "tag"]
+  else
     raise (Unix.Unix_error (Unix.ENOENT, "readdir", path))
-  )
 
 (* Copies the contents of the given string into the given buffer, returning
  * the number of bytes copied. *)
@@ -153,12 +190,22 @@ let commit_readlink (path:string) : string =
     | _ -> raise (Unix.Unix_error (Unix.EINVAL, "readlink", path))
   with Not_found -> raise (Unix.Unix_error (Unix.ENOENT, "readlink", path))
 
+let tag_readlink (path:string) : string =
+  let tag, _ = parse_tag_path path in
+  try
+    let ref = Refs.lookup (String.concat "" ["refs/tags/"; tag]) in
+    Filename.concat "../commit" ref.r_target
+  with Not_found -> raise (Unix.Unix_error (Unix.ENOENT, "readlink", path))
+
 let figfs_readlink (path:string) : string =
-  if starts_with "/commit/" path && String.length path >= 48 then (
+  Printf.printf "readlink(%s)\n" path;
+  flush Pervasives.stdout;
+  if starts_with "/commit/" path && String.length path >= 48 then
     commit_readlink path
-  ) else (
+  else if starts_with "/tag/" path && String.length path > 5 then
+    tag_readlink path
+  else
     raise (Unix.Unix_error (Unix.ENOENT, "readlink", path))
-  )
 
 let operations : Fuse.operations = {
   Fuse.default_operations with

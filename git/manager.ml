@@ -56,6 +56,7 @@ let traverse_tree (h:hash) (path:string) : obj =
     | [] -> (
       match find_object h with
       | Commit c -> helper c.c_tree path
+      | Tag g -> helper g.g_object path
       | o -> o
     )
   in helper h (Util.split path '/')

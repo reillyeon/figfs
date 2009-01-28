@@ -88,7 +88,8 @@ let refresh_packed_refs () : unit =
             | None -> helper rest
           )
         | [] -> () in
-      helper lines
+      helper lines;
+      packed_ref_mtime := file_stat.st_mtime
     )
   )
 

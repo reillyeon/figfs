@@ -163,7 +163,9 @@ let tree_traverse_fail_test (c:hash) (p:string) () =
   assert_raises Not_found (fun _ -> Manager.traverse_tree c p)
 
 let tree_traverse_tests = "tree traversal tests" >::: [
-  "tree1" >:: tree_traverse_test (hash_of_obj commit1) "/" tree1;
+  "commit1" >:: tree_traverse_test (hash_of_obj commit1) "/" tree1;
+  "commit2" >:: tree_traverse_test (hash_of_obj commit2) "/" tree2;
+  "tag0" >:: tree_traverse_test (hash_of_obj tag0) "/" tree2;
   "blob1a" >:: tree_traverse_test (hash_of_obj commit1) "/a" blob1;
   "blob1b" >:: tree_traverse_test (hash_of_obj commit1) "/b" blob1;
   "blob2" >:: tree_traverse_test (hash_of_obj commit2) "/a" blob2;
