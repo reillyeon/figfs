@@ -25,6 +25,25 @@ open Util
 open Unix
 open Unix.LargeFile
 
+type open_file = {
+    of_read : Fuse.buffer -> int64 -> int;
+    of_write : Fuse.buffer -> int64 -> int;
+  }
+
+let open_files : (int, open_file) Hashtbl.t = Hashtbl.create 8
+
+let next_fd : int ref = ref 0
+
+let rec new_fd () : int =
+  if Hashtbl.mem open_files !next_fd then (
+    incr next_fd;
+    new_fd ()
+  ) else (
+    let fd = !next_fd in
+    incr next_fd;
+    fd
+  )
+
 let base_stat = {
   st_dev = 0;
   st_ino = 0;
@@ -154,32 +173,53 @@ let string_to_buffer_blit (str:string) (start:int) (len:int) (buf:Fuse.buffer)
   done;
   len
 
-let static_read (path:string) (data:string) (buf:Fuse.buffer) (off:int64)
-    : int =
-  let offset = Int64.to_int off in
-  if offset < 0 || offset >= (String.length data)
-  then raise (Unix.Unix_error (Unix.EINVAL, "read", path))
-  else
-    let to_read =
-      min (String.length data - offset) (Bigarray.Array1.dim buf) in
-    string_to_buffer_blit data offset to_read buf
+let static_reader (path:string) (data:string) : Fuse.buffer -> int64 -> int =
+  fun (buf:Fuse.buffer) (off:int64) ->
+    let offset = Int64.to_int off in
+    if offset < 0 || offset >= (String.length data)
+    then raise (Unix.Unix_error (Unix.EINVAL, "read", path))
+    else
+      let to_read =
+        min (String.length data - offset) (Bigarray.Array1.dim buf) in
+      string_to_buffer_blit data offset to_read buf
 
-let commit_read (path:string) (buf:Fuse.buffer) (off:int64) : int =
+let static_writer (path:string) : Fuse.buffer -> int64 -> int =
+  fun _ _ -> raise (Unix.Unix_error (Unix.EACCES, "write", path))
+
+let static_fopen (path:string) (data:string) : int =
+  let fd = new_fd () in
+  let openfd = { of_read = static_reader path data;
+                 of_write = static_writer path } in
+  Hashtbl.add open_files fd openfd;
+  fd
+
+let commit_fopen (path:string) : int =
   let commit, remaining_path = split_root_path path in
   try
     let file = traverse_tree commit remaining_path in
     match file with
-    | Blob b -> static_read path b.b_data buf off
-    | _ -> raise (Unix.Unix_error (Unix.EISDIR, "read", path))
-  with Not_found -> raise (Unix.Unix_error (Unix.ENOENT, "read", path))
+    | Blob b -> static_fopen path b.b_data
+    | _ -> raise (Unix.Unix_error (Unix.EISDIR, "fopen", path))
+  with Not_found -> raise (Unix.Unix_error (Unix.ENOENT, "fopen", path))
+
+let figfs_fopen (path:string) (flags:Unix.open_flag list) : int option =
+  if starts_with "/commit/" path && String.length path >= 48 then
+    Some (commit_fopen path)
+  else if "/commit/README" = path then
+    Some (static_fopen path commit_README)
+  else
+    raise (Unix.Unix_error (Unix.ENOENT, "fopen", path))
+
+let figfs_release (path:string) (flags:Unix.open_flag list) (fd:int) : unit =
+  Hashtbl.remove open_files fd
 
 let figfs_read (path:string) (buf:Fuse.buffer) (off:int64) (fd:int) : int =
-  if starts_with "/commit/" path && String.length path >= 48 then
-    commit_read path buf off
-  else if "/commit/README" = path then
-    static_read path commit_README buf off
-  else
-    raise (Unix.Unix_error (Unix.ENOENT, "read", path))
+  let openfd = Hashtbl.find open_files fd in
+  openfd.of_read buf off
+
+let figfs_write (path:string) (buf:Fuse.buffer) (off:int64) (fd:int) : int =
+  let openfd = Hashtbl.find open_files fd in
+  openfd.of_write buf off
 
 let commit_readlink (path:string) : string =
   let commit, remaining_path = split_root_path path in
@@ -212,7 +252,10 @@ let operations : Fuse.operations = {
   Fuse.default_operations with
   Fuse.getattr = figfs_getattr;
   Fuse.readdir = figfs_readdir;
+  Fuse.fopen = figfs_fopen;
+  Fuse.release = figfs_release;
   Fuse.read = figfs_read;
+  Fuse.write = figfs_write;
   Fuse.readlink = figfs_readlink
 }
 
