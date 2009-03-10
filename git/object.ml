@@ -104,14 +104,18 @@ type tag = {
     g_object : hash; (* Object tagged. *)
     g_type : obj_type; (* Type of object tagged. *)
     g_name : string; (* Name of tag. *)
-    g_tagger : string; (* Author of tag. *)
+    g_tagger : string option; (* Author of tag. *)
     g_message : string (* Tag message. *)
   }
 
 let string_of_tag tag : string =
-  Printf.sprintf "Tag: %s (%s)\nObject: %s (%s)\nTagger: %s\n\n%s"
+  let tagger =
+    match tag.g_tagger with
+    | Some t -> Printf.sprintf "Tagger %s\n" t
+    | None -> "" in
+  Printf.sprintf "Tag: %s (%s)\nObject: %s (%s)\n%s\n%s"
     tag.g_name tag.g_hash tag.g_object (string_of_obj_type tag.g_type)
-    tag.g_tagger tag.g_message
+    tagger tag.g_message
 
 type obj =
   | Commit of commit
@@ -162,14 +166,15 @@ let parse_commit (data:string) : hash * hash list * string * string * string =
       | _ -> failwith ("Unknown commit property: " ^ field)
   in helper data None [] None None
 
-let parse_tag (data:string) : hash * obj_type * string * string * string =
-    let rec helper data object_acc type_acc name_acc tagger_acc =
+let parse_tag (data:string)
+    : hash * obj_type * string * string option * string =
+  let rec helper data object_acc type_acc name_acc tagger_acc =
     let newline_index = String.index data '\n' in
     if newline_index = 0
     then
       let m = String.sub data 1 (String.length data - 1) in
       match object_acc, type_acc, name_acc, tagger_acc with
-      | (Some o, Some t, Some n, Some a) -> (o,t,n,a,m)
+      | (Some o, Some t, Some n, a) -> (o,t,n,a,m)
       | _ -> failwith "Tag parse not complete."
     else
       let space_index = String.index data ' ' in

@@ -96,7 +96,7 @@ let tag0 = Tag {
   g_object = "96828b6633da42da034196d12af3fe4332b4b347";
   g_type = TCommit;
   g_name = "tag0";
-  g_tagger = "Reilly Grant <reillyeon@qotw.net> 1231637882 -0500";
+  g_tagger = Some "Reilly Grant <reillyeon@qotw.net> 1231637882 -0500";
   g_message = "This is a tag.\n" }
 
 let refs_loose =

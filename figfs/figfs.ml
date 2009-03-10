@@ -44,6 +44,10 @@ let rec new_fd () : int =
     fd
   )
 
+let print (msg:string) =
+  Printf.printf "%s\n" msg;
+  flush Pervasives.stdout
+
 let base_stat = {
   st_dev = 0;
   st_ino = 0;
@@ -104,12 +108,8 @@ let commit_getattr (path:string) : Unix.LargeFile.stats =
 let ref_getattr (path:string) (refbase:string) : Unix.LargeFile.stats =
   let name, rest = split_root_path path in
   try
-    if rest <> "/" then raise Not_found;
     let ref = Refs.lookup (String.concat "/" [refbase; name]) in
-    { base_stat with
-      st_kind = S_LNK;
-      st_perm = 0o777;
-      st_size = Int64.of_int (String.length ref.r_target + 10) }
+    commit_getattr (String.concat "" ["/commit/"; ref.r_target; rest])
   with Not_found -> raise (Unix.Unix_error (Unix.ENOENT, "getattr", path))
 
 let figfs_getattr (path:string) : Unix.LargeFile.stats =
@@ -141,7 +141,14 @@ let commit_readdir (path:string) : string list =
     with Not_found -> raise (Unix.Unix_error (Unix.ENOENT, "readdir", path))
   in "." :: ".." :: entries
 
-let ref_readdir (refbase:string) : string list =
+let ref_readdir (refbase:string) (path:string) : string list =
+  let name, rest = split_root_path path in
+  try
+    let ref = Refs.lookup (String.concat "/" [refbase; name]) in
+    commit_readdir (String.concat "" ["/commit/"; ref.r_target; rest])
+  with Not_found -> raise (Unix.Unix_error (Unix.ENOENT, "readdir", path))
+
+let refdir_readdir (refbase:string) : string list =
   let all_refs = Refs.all () in
   let all_names = List.map (fun r -> r.r_name) all_refs in
   let cat_refs = List.filter (fun s -> starts_with refbase s) all_names in
@@ -153,10 +160,14 @@ let ref_readdir (refbase:string) : string list =
 let figfs_readdir (path:string) (fd:int) : string list =
   if starts_with "/commit/" path && String.length path >= 48 then
     commit_readdir path
+  else if starts_with "/tag/" path && String.length path > 5 then
+    ref_readdir "refs/tags" path
+  else if starts_with "/branch/" path && String.length path > 8 then
+    ref_readdir "refs/heads" path
   else if "/tag" = path then
-    ref_readdir "refs/tags"
+    refdir_readdir "refs/tags"
   else if "/branch" = path then
-    ref_readdir "refs/heads"
+    refdir_readdir "refs/heads"
   else if "/commit" = path then
     ["."; ".."; "README"]
   else if "/" = path then
@@ -202,9 +213,20 @@ let commit_fopen (path:string) : int =
     | _ -> raise (Unix.Unix_error (Unix.EISDIR, "fopen", path))
   with Not_found -> raise (Unix.Unix_error (Unix.ENOENT, "fopen", path))
 
+let ref_fopen (refbase:string) (path:string) : int =
+  let name, rest = split_root_path path in
+  try
+    let ref = Refs.lookup (String.concat "/" [refbase; name]) in
+    commit_fopen (String.concat "" ["/commit/"; ref.r_target; rest])
+  with Not_found -> raise (Unix.Unix_error (Unix.ENOENT, "fopen", path))
+
 let figfs_fopen (path:string) (flags:Unix.open_flag list) : int option =
   if starts_with "/commit/" path && String.length path >= 48 then
     Some (commit_fopen path)
+  else if starts_with "/tag/" path && String.length path > 5 then
+    Some (ref_fopen "refs/tags" path)
+  else if starts_with "/branch/" path && String.length path > 5 then
+    Some (ref_fopen "refs/heads" path)
   else if "/commit/README" = path then
     Some (static_fopen path commit_README)
   else
@@ -230,32 +252,31 @@ let commit_readlink (path:string) : string =
     | _ -> raise (Unix.Unix_error (Unix.EINVAL, "readlink", path))
   with Not_found -> raise (Unix.Unix_error (Unix.ENOENT, "readlink", path))
 
-let ref_readlink (path:string) (refbase:string) : string =
+let ref_readlink (refbase:string) (path:string) : string =
   let name, rest = split_root_path path in
   try
-    if rest <> "/" then raise Not_found;
     let ref = Refs.lookup (String.concat "/" [refbase; name]) in
-    Filename.concat "../commit" ref.r_target
+    commit_readlink (String.concat "" ["/commit/"; ref.r_target; rest])
   with Not_found -> raise (Unix.Unix_error (Unix.ENOENT, "readlink", path))
 
 let figfs_readlink (path:string) : string =
   if starts_with "/commit/" path && String.length path >= 48 then
     commit_readlink path
   else if starts_with "/tag/" path && String.length path > 5 then
-    ref_readlink path "refs/tags"
+    ref_readlink "refs/tags" path
   else if starts_with "/branch/" path && String.length path > 8 then
-    ref_readlink path "refs/heads"
+    ref_readlink "refs/heads" path
   else
     raise (Unix.Unix_error (Unix.ENOENT, "readlink", path))
 
 let operations : Fuse.operations = {
   Fuse.default_operations with
-  Fuse.getattr = figfs_getattr;
-  Fuse.readdir = figfs_readdir;
-  Fuse.fopen = figfs_fopen;
-  Fuse.release = figfs_release;
-  Fuse.read = figfs_read;
-  Fuse.write = figfs_write;
+  Fuse.getattr  = figfs_getattr;
+  Fuse.readdir  = figfs_readdir;
+  Fuse.fopen    = figfs_fopen;
+  Fuse.release  = figfs_release;
+  Fuse.read     = figfs_read;
+  Fuse.write    = figfs_write;
   Fuse.readlink = figfs_readlink
 }
 
@@ -273,16 +294,16 @@ let fuse_opts = ref []
 
 let argspec =
   [("-r", Arg.String (fun s -> repo_dir := Some (make_absolute s)),
-      "repository path");
-     ("-d", Arg.Unit (fun () -> fuse_opts := "-d" :: !fuse_opts),
-      "debug output (implies -f)");
-     ("-f", Arg.Unit (fun () -> fuse_opts := "-f" :: !fuse_opts),
-      "foreground operation");
-     ("-s", Arg.Unit (fun () -> fuse_opts := "-s" :: !fuse_opts),
-      "disable-multithreaded operation");
-     ("-o", Arg.String (fun s ->
-       fuse_opts := Printf.sprintf "-o %s" s :: !fuse_opts),
-      "Fuse options.")]
+    "repository path");
+   ("-d", Arg.Unit (fun () -> fuse_opts := "-d" :: !fuse_opts),
+    "debug output (implies -f)");
+   ("-f", Arg.Unit (fun () -> fuse_opts := "-f" :: !fuse_opts),
+    "foreground operation");
+   ("-s", Arg.Unit (fun () -> fuse_opts := "-s" :: !fuse_opts),
+    "disable-multithreaded operation");
+   ("-o", Arg.String (fun s ->
+     fuse_opts := Printf.sprintf "-o %s" s :: !fuse_opts),
+    "Fuse options.")]
 
 let argrest s =
   fuse_opts := s :: !fuse_opts

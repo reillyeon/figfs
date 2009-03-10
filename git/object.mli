@@ -72,7 +72,7 @@ type tag = {
     g_object : hash; (* Object tagged. *)
     g_type : obj_type; (* Type of object tagged. *)
     g_name : string; (* Name of tag. *)
-    g_tagger : string; (* Author of tag. *)
+    g_tagger : string option; (* Author of tag. *)
     g_message : string (* Tag message. *)
   }
 
