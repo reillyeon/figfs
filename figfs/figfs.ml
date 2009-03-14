@@ -310,12 +310,25 @@ let argrest s =
 
 let argusage = "usage: figfs [options] mountpoint"
 
+let check_figfs_dir () =
+  let figfs_dir = Filename.concat (get_repo_dir ()) ".figfs" in
+  if Sys.file_exists figfs_dir then (
+    if Sys.is_directory figfs_dir then ((* good *))
+    else failwith "Repository contains .figfs, but it isn't a directory."
+  ) else mkdir figfs_dir 0o755
+
 let _ =
-  Arg.parse argspec argrest argusage;
-  match !repo_dir with
-  | Some dir -> (
-      set_repo_dir dir;
-      let args = Array.of_list ("figfs" :: List.rev !fuse_opts) in
-      Fuse.main args operations
-    )
-  | None -> Printf.eprintf "No repository found.\n"
+  try (
+    Arg.parse argspec argrest argusage;
+    match !repo_dir with
+    | Some dir -> (
+        set_repo_dir dir;
+        check_figfs_dir ();
+        Workspace.init ();
+        let args = Array.of_list ("figfs" :: List.rev !fuse_opts) in
+        Fuse.main args operations
+      )
+    | None -> failwith "No repository found."
+  ) with
+  | Failure s -> Printf.eprintf "%s\n" s
+  | Sys_error s -> Printf.eprintf "%s\n" s

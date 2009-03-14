@@ -25,6 +25,8 @@ OCAMLFLAGS += -thread
 
 FILES[] =
 	figfs
+	command
+	workspace
 
 USE_OCAMLFIND = true
 
