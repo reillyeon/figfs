@@ -19,8 +19,6 @@
 open Repository
 open Util
 
-open Unix
-
 type obj_ref = {
     r_name : string;               (* ref name *)
     r_target : Object.hash;        (* object referenced *)
@@ -49,7 +47,7 @@ let refresh_packed_refs () : unit =
   let filename = Filename.concat (get_repo_dir ()) "packed-refs" in
   if Sys.file_exists filename then (
     let file_stat = Unix.stat filename in
-    if file_stat.st_mtime > !packed_ref_mtime then (
+    if file_stat.Unix.st_mtime > !packed_ref_mtime then (
       let fin = open_in filename in
       let buf = String.create (in_channel_length fin) in
       really_input fin buf 0 (String.length buf);
@@ -89,7 +87,7 @@ let refresh_packed_refs () : unit =
           )
         | [] -> () in
       helper lines;
-      packed_ref_mtime := file_stat.st_mtime
+      packed_ref_mtime := file_stat.Unix.st_mtime
     )
   )
 

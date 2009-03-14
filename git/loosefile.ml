@@ -20,8 +20,6 @@ open Repository
 open Object
 open Util
 
-open Unix
-
 let find_loose_file (hash:hash) : string =
   let prefix = String.sub hash 0 2 in
   let suffix = String.sub hash 2 (String.length hash - 2) in
@@ -31,7 +29,7 @@ let find_object_raw (hash:hash) : obj_stat * string =
   let path = find_loose_file hash in
   if Sys.file_exists path
   then (
-    let fd = openfile path [O_RDONLY] 0 in
+    let fd = Unix.openfile path [Unix.O_RDONLY] 0 in
     let data = inflate_file fd in
     let space_index = String.index data ' ' in
     let null_index = String.index data '\000' in
