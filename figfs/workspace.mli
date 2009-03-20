@@ -23,3 +23,11 @@ val list : unit -> string list
 val create : string -> string -> unit
 
 val destroy : string -> unit
+
+val file_path : string -> string -> string
+
+val file_exists : string -> string -> bool -> bool
+
+val create_file : string -> string -> unit
+
+val delete_file : string -> string -> unit
