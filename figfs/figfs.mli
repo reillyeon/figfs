@@ -1,5 +1,5 @@
-(* Figfs writable workspace management.
- * Copyright (C) 2009 Reilly Grant
+(* Filesystem Interface to Git.
+ * Copyright (C) 2008 Reilly Grant
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -16,20 +16,4 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  *)
 
-val init : unit -> unit
-
-val list : unit -> string list
-
-val create : string -> string -> unit
-
-val destroy : string -> unit
-
-val file_path : string -> string -> string
-
-val file_exists : string -> string -> bool -> bool
-
-val create_file : string -> string -> unit
-
-val delete_file : string -> string -> unit
-
-val base_commit : string -> string
+val main : string array -> unit

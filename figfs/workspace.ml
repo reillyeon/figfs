@@ -96,3 +96,7 @@ let create_file (workspace:string) (path:string) : unit =
 
 let delete_file (workspace:string) (path:string) : unit =
   failwith "Workspace.delete_file"
+
+let base_commit (workspace:string) : string =
+  let w = Hashtbl.find workspaces workspace in
+  w.w_tree

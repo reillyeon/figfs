@@ -23,10 +23,21 @@ OCAMLINCLUDES += ../git ../fuse
 OCAML_LIBS += ../git/git ../fuse/fuse
 OCAMLFLAGS += -thread
 
-FILES[] =
-	figfs
+COMMON_FILES[] =
 	command
+	figfs
 	workspace
+
+FS_FILES[] =
+	figfs_mount
+
+TOOL_FILES[] =
+	figfs_tool
+
+FILES[] =
+	$(COMMON_FILES)
+	$(FS_FILES)
+	$(TOOL_FILES)
 
 USE_OCAMLFIND = true
 
@@ -36,12 +47,14 @@ OCAMLPACKS[] =
 	bigarray
 	camlzip
 
-OCamlProgram(figfs, $(FILES))
+OCamlProgram(mount.figfs, $(FS_FILES) $(COMMON_FILES))
 
-.DEFAULT: figfs
+OCamlProgram(figfs, $(TOOL_FILES) $(COMMON_FILES))
+
+.DEFAULT: mount.figfs figfs
 
 all: .DEFAULT
 
 clean:
-	rm -f figfs figfs.run figfs.opt
+	rm -f figfs figfs.run figfs.opt mount.figfs mount.figfs.run mount.figfs.opt
 	rm -f $(filter-proper-targets $(glob $(addsuffix .*, $(FILES))))

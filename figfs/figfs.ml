@@ -81,17 +81,17 @@ let split_root_path (path:string) : string * string =
     String.sub path root_start (String.length path - root_start), "/"
 
 let commit_getattr (path:string) : Unix.LargeFile.stats =
-  let commit, remaining_path = split_root_path path in
-  if remaining_path = "" || remaining_path = "/" then
+  let commit, rest = split_root_path path in
+  if rest = "" || rest = "/" then
     { base_stat with
       st_kind = Unix.S_DIR;
       st_perm = 0o755 }
   else try (
-    let dir = traverse_tree commit (Filename.dirname remaining_path) in
+    let dir = traverse_tree commit (Filename.dirname rest) in
     match dir with
     | Tree t ->
         let (perms,_,file_hash) = List.find (fun (_,n,_) -> n =
-          (Filename.basename remaining_path)) t.t_dirents in
+          (Filename.basename rest)) t.t_dirents in
         let file_stat = stat_object file_hash in
         let kind =
           match file_stat.os_type with
@@ -104,6 +104,21 @@ let commit_getattr (path:string) : Unix.LargeFile.stats =
           st_size = Int64.of_int file_stat.os_size }
     | _ -> failwith "Parent object not directory?"
    ) with Not_found -> raise (Unix.Unix_error (Unix.ENOENT, "getattr", path))
+
+let ws_getattr (path:string) : Unix.LargeFile.stats =
+  let workspace, rest = split_root_path path in
+  try (
+    let exists =
+      try (
+        ignore (traverse_tree (Workspace.base_commit workspace) rest); true
+      ) with Not_found -> false in
+    if Workspace.file_exists workspace rest exists then (
+      let wspath = Workspace.file_path workspace rest in
+      ignore wspath; failwith "ws_getattr"
+    ) else (
+      failwith "ws_getattr"
+    )
+  ) with Not_found -> raise (Unix.Unix_error (Unix.ENOENT, "getattr", path))
 
 let ref_getattr (path:string) (refbase:string) : Unix.LargeFile.stats =
   let name, rest = split_root_path path in
@@ -119,8 +134,10 @@ let figfs_getattr (path:string) : Unix.LargeFile.stats =
     ref_getattr path "refs/tags"
   else if starts_with "/branch/" path && String.length path > 8 then
     ref_getattr path "refs/heads"
+  else if starts_with "/workspace/" path && String.length path > 11 then
+    ws_getattr path
   else if "/commit" = path || "/tag" = path || "/branch" = path ||
-          "/" = path then
+          "/workspace" = path || "/" = path then
     { base_stat with
       st_kind = Unix.S_DIR;
       st_perm = 0o755 }
@@ -131,10 +148,10 @@ let figfs_getattr (path:string) : Unix.LargeFile.stats =
     raise (Unix.Unix_error (Unix.ENOENT, "getattr", path))
 
 let commit_readdir (path:string) : string list =
-  let commit, remaining_path = split_root_path path in
+  let commit, rest = split_root_path path in
   let entries =
     try
-      let dir = traverse_tree commit remaining_path in
+      let dir = traverse_tree commit rest in
       match dir with
       | Tree t -> List.map (fun (_,n,_) -> n) t.t_dirents
       | _ -> raise (Unix.Unix_error (Unix.ENOTDIR, "readdir", path))
@@ -157,6 +174,10 @@ let refdir_readdir (refbase:string) : string list =
     String.sub s base_len (String.length s - base_len)) cat_refs in
   "." :: ".." :: cat_names
 
+let wsdir_readdir () : string list =
+  let workspaces = Workspace.list () in
+  "." :: ".." :: workspaces
+
 let figfs_readdir (path:string) (fd:int) : string list =
   if starts_with "/commit/" path && String.length path >= 48 then
     commit_readdir path
@@ -168,10 +189,12 @@ let figfs_readdir (path:string) (fd:int) : string list =
     refdir_readdir "refs/tags"
   else if "/branch" = path then
     refdir_readdir "refs/heads"
+  else if "/workspace" = path then
+    wsdir_readdir ()
   else if "/commit" = path then
     ["."; ".."; "README"]
   else if "/" = path then
-    ["."; ".."; "commit"; "tag"; "branch"]
+    ["."; ".."; "commit"; "tag"; "branch"; "workspace"]
   else
     raise (Unix.Unix_error (Unix.ENOENT, "readdir", path))
 
@@ -205,9 +228,9 @@ let static_fopen (path:string) (data:string) : int =
   fd
 
 let commit_fopen (path:string) : int =
-  let commit, remaining_path = split_root_path path in
+  let commit, rest = split_root_path path in
   try
-    let file = traverse_tree commit remaining_path in
+    let file = traverse_tree commit rest in
     match file with
     | Blob b -> static_fopen path b.b_data
     | _ -> raise (Unix.Unix_error (Unix.EISDIR, "fopen", path))
@@ -244,9 +267,9 @@ let figfs_write (path:string) (buf:Fuse.buffer) (off:int64) (fd:int) : int =
   openfd.of_write buf off
 
 let commit_readlink (path:string) : string =
-  let commit, remaining_path = split_root_path path in
+  let commit, rest = split_root_path path in
   try
-    let file = traverse_tree commit remaining_path in
+    let file = traverse_tree commit rest in
     match file with
     | Blob b -> b.b_data
     | _ -> raise (Unix.Unix_error (Unix.EINVAL, "readlink", path))
@@ -317,9 +340,10 @@ let check_figfs_dir () =
     else failwith "Repository contains .figfs, but it isn't a directory."
   ) else mkdir figfs_dir 0o755
 
-let _ =
+let main (argv:string array) =
+  let current = ref 0 in
   try (
-    Arg.parse argspec argrest argusage;
+    Arg.parse_argv ~current argv argspec argrest argusage;
     match !repo_dir with
     | Some dir -> (
         set_repo_dir dir;
@@ -332,3 +356,4 @@ let _ =
   ) with
   | Failure s -> Printf.eprintf "%s\n" s
   | Sys_error s -> Printf.eprintf "%s\n" s
+  | Arg.Help s -> Printf.eprintf "%s\n" s
