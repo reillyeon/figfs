@@ -19,77 +19,116 @@
 open Repository
 open Util
 
-module StringSet = Set.Make(String)
+module Mode = struct
+  type t =
+    | Exists
+    | Whiteout
+    | Unknown
 
-type workspace = {
-    w_name : string;
-    w_tree : string;
-    mutable w_whiteout : StringSet.t
-  }
+  let to_string t : string =
+    match t with
+    | Exists -> "Exists"
+    | Whiteout -> "Whiteout"
+    | Unknown -> "Unknown"
+end
 
 let dir () =
-  String.concat "/" [get_repo_dir (); ".figfs"; "workspaces"]
+  String.concat "/" [get_repo_dir (); "figfs"]
 
 let file_dir (workspace:string) =
-  String.concat "" [(dir ()); "/"; workspace; ".dir"]
+  String.concat "" [(dir ()); "/"; workspace; ".ws"]
 
 let file_path (workspace:string) (path:string) =
   String.concat "" [(file_dir workspace); path]
 
-let workspaces : (string, workspace) Hashtbl.t = Hashtbl.create 8
+let dbHandle : Sqlite3.db option ref = ref None
 
-let parse_config () =
-  let config_file = Filename.concat (dir ()) "config" in
-  if Sys.file_exists config_file then
-    let file = open_in config_file in
-    try (
-      while true do
-        let line = input_line file in
-        let words = unwords line in
-        match words with
-        | [hash; name] -> Hashtbl.add workspaces name
-              { w_name = name; w_tree = hash; w_whiteout = StringSet.empty }
-        | _ -> failwith "Parse error in workspace config."
-      done
-    ) with End_of_file -> ()
-  else ((* no config file, that's ok *))
+let db () : Sqlite3.db =
+  match !dbHandle with
+  | Some h -> h
+  | None ->
+    let db = Sqlite3.db_open (Filename.concat (dir ()) "workspaces.db") in
+    if Sqlite3.errcode db <> Sqlite3.Rc.OK
+    then failwith (Sqlite3.errmsg db)
+    else dbHandle := Some db; db
 
-let save_config () : unit =
-  let config_file = Filename.concat (dir ()) "config" in
-  let file = open_out config_file in
-  Hashtbl.iter (fun _ w ->
-    Printf.fprintf file "%s %s\n" w.w_tree w.w_name
-  ) workspaces
+let prepareQuery (handle:Sqlite3.stmt option ref) (query:string) ()
+    : Sqlite3.stmt =
+  let db = db () in
+  match !handle with
+  | Some h -> h
+  | None ->
+    let query =
+      try Sqlite3.prepare db query
+      with Sqlite3.Error reason -> failwith (Printf.sprintf "sqlite: %s" reason)
+    in handle := Some query; query
+
+let listQueryHandle : Sqlite3.stmt option ref = ref None
+let addWorkspaceQueryHandle : Sqlite3.stmt option ref = ref None
+let existsWorkspaceQueryHandle : Sqlite3.stmt option ref = ref None
+let destroyWorkspaceQueryHandle : Sqlite3.stmt option ref = ref None
+let clearWorkspaceQueryHandle : Sqlite3.stmt option ref = ref None
+let statFileQueryHandle : Sqlite3.stmt option ref = ref None
+let statWorkspaceQueryHandle : Sqlite3.stmt option ref = ref None
+
+let listQuery = prepareQuery listQueryHandle "SELECT name FROM workspace"
+let addWorkspaceQuery = prepareQuery addWorkspaceQueryHandle
+    "INSERT INTO workspace VALUES (?, ?)"
+let existsWorkspaceQuery = prepareQuery existsWorkspaceQueryHandle
+    "SELECT COUNT(*) FROM workspace WHERE name = ?"
+let destroyWorkspaceQuery = prepareQuery destroyWorkspaceQueryHandle
+    "DELETE FROM workspace WHERE name = ?"
+let clearWorkspaceQuery = prepareQuery clearWorkspaceQueryHandle
+    "DELETE FROM file WHERE workspace = ?"
+let statFileQuery = prepareQuery statFileQueryHandle
+    "SELECT whiteout FROM file WHERE workspace = ? AND name = ?"
+let statWorkspaceQuery = prepareQuery statWorkspaceQueryHandle
+    "SELECT base FROM workspace WHERE name = ?"
 
 let init () : unit =
-  let workspace_dir = dir () in
-  if Sys.file_exists workspace_dir then (
-    if Sys.is_directory workspace_dir then (
-      parse_config ()
-    ) else (
-      failwith "Cannot create workspace directory."
-    )
-  ) else (
-    Unix.mkdir workspace_dir 0o755;
-  )
+  let db = db () in
+  if Sqlite3.exec db
+      "CREATE TABLE IF NOT EXISTS workspace (name STRING PRIMARY KEY, base CHAR(40))"
+      <> Sqlite3.Rc.OK
+  then failwith (Printf.sprintf "sqlite: %s" (Sqlite3.errmsg db));
+  if Sqlite3.exec db
+      "CREATE TABLE IF NOT EXISTS file (workspace STRING, name STRING, whiteout BOOLEAN, PRIMARY KEY (workspace, name))"
+      <> Sqlite3.Rc.OK
+  then failwith (Printf.sprintf "sqlite: %s" (Sqlite3.errmsg db))
 
 let list () : string list =
-  Hashtbl.fold (fun _ w l -> w.w_name :: l) workspaces []
+  let stmt = listQuery () in
+  if Sqlite3.reset stmt = Sqlite3.Rc.OK
+  then (
+    let rec loop accum =
+      if Sqlite3.step stmt = Sqlite3.Rc.ROW
+      then loop (Sqlite3.Data.to_string (Sqlite3.column stmt 0) :: accum)
+      else accum
+    in loop []
+  ) else failwith (Printf.sprintf "sqlite: %s" (Sqlite3.errmsg (db ())))
 
 let create (name:string) (hash:string) : unit =
-  Hashtbl.add workspaces name { w_name = name; w_tree = hash;
-                                w_whiteout = StringSet.empty };
   Unix.mkdir (file_dir name) 0o755;
-  save_config ()
+  failwith "Workspace.create"
 
 let destroy (name:string) : unit =
   failwith "Workspace.destroy"
 
-let file_exists (workspace:string) (path:string) (default:bool) : bool =
-  let w = Hashtbl.find workspaces workspace in
-  if StringSet.mem path w.w_whiteout then false
-  else if Sys.file_exists (file_path workspace path) then true
-  else default
+let stat_file (workspace:string) (path:string) : Mode.t =
+  let stmt = statFileQuery () in
+  if Sqlite3.reset stmt = Sqlite3.Rc.OK &&
+     Sqlite3.bind stmt 1 (Sqlite3.Data.TEXT workspace) = Sqlite3.Rc.OK &&
+     Sqlite3.bind stmt 2 (Sqlite3.Data.TEXT path) = Sqlite3.Rc.OK
+  then (
+    let rc = Sqlite3.step stmt in
+    if rc = Sqlite3.Rc.ROW
+    then (
+      let whiteout = Sqlite3.column stmt 0 in
+      if whiteout = (Sqlite3.Data.INT 1L) then Mode.Whiteout
+      else Mode.Exists
+    ) else if rc = Sqlite3.Rc.DONE then Mode.Unknown
+    else failwith (Printf.sprintf "sqlite: %s" (Sqlite3.errmsg (db ())))
+  ) else failwith (Printf.sprintf "sqlite: %s" (Sqlite3.errmsg (db ())))
 
 let create_file (workspace:string) (path:string) : unit =
   failwith "Workspace.create_file"
@@ -97,6 +136,10 @@ let create_file (workspace:string) (path:string) : unit =
 let delete_file (workspace:string) (path:string) : unit =
   failwith "Workspace.delete_file"
 
-let base_commit (workspace:string) : string =
-  let w = Hashtbl.find workspaces workspace in
-  w.w_tree
+let base (workspace:string) : string =
+  let stmt = statWorkspaceQuery () in
+  if Sqlite3.reset stmt = Sqlite3.Rc.OK &&
+     Sqlite3.bind stmt 1 (Sqlite3.Data.TEXT workspace) = Sqlite3.Rc.OK &&
+     Sqlite3.step stmt = Sqlite3.Rc.ROW
+  then Sqlite3.Data.to_string (Sqlite3.column stmt 0)
+  else failwith (Printf.sprintf "sqlite: %s" (Sqlite3.errmsg (db ())))

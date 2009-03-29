@@ -60,3 +60,6 @@ val is_seven_bit : char -> bool
 (* Decompress the data available from the given file descriptor.  Continues
  * until zlib detects the end of the stream. *)
 val inflate_file : Unix.file_descr -> string
+
+(* Like List.merge, but will ignore duplicate values. *)
+val merge_unique : 'a list -> 'a list -> ('a -> 'a -> int) -> 'a list

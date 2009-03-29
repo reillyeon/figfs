@@ -16,6 +16,15 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  *)
 
+module Mode : sig
+  type t =
+    | Exists
+    | Whiteout
+    | Unknown
+
+  val to_string : t -> string
+end
+
 val init : unit -> unit
 
 val list : unit -> string list
@@ -26,10 +35,10 @@ val destroy : string -> unit
 
 val file_path : string -> string -> string
 
-val file_exists : string -> string -> bool -> bool
+val stat_file : string -> string -> Mode.t
 
 val create_file : string -> string -> unit
 
 val delete_file : string -> string -> unit
 
-val base_commit : string -> string
+val base : string -> string

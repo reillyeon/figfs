@@ -34,10 +34,14 @@ FS_FILES[] =
 TOOL_FILES[] =
 	figfs_tool
 
+TEST_FILES[] =
+	figfs_test
+
 FILES[] =
 	$(COMMON_FILES)
 	$(FS_FILES)
 	$(TOOL_FILES)
+	$(TEST_FILES)
 
 USE_OCAMLFIND = true
 
@@ -46,15 +50,19 @@ OCAMLPACKS[] =
 	threads
 	bigarray
 	camlzip
+	sqlite3
 
 OCamlProgram(mount.figfs, $(FS_FILES) $(COMMON_FILES))
 
 OCamlProgram(figfs, $(TOOL_FILES) $(COMMON_FILES))
 
-.DEFAULT: mount.figfs figfs
+OCamlProgram(figfs_test, $(TEST_FILES) $(COMMON_FILES))
+
+.DEFAULT: mount.figfs figfs figfs_test
 
 all: .DEFAULT
 
 clean:
 	rm -f figfs figfs.run figfs.opt mount.figfs mount.figfs.run mount.figfs.opt
+	rm -f figfs_test figfs_test.run figfs_test.opt
 	rm -f $(filter-proper-targets $(glob $(addsuffix .*, $(FILES))))

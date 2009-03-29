@@ -145,3 +145,14 @@ let inflate_file (fd:Unix.file_descr) : string =
   let flush buffer len = Buffer.add_substring out_buf buffer 0 len in
   Zlib.uncompress fill flush;
   Buffer.contents out_buf
+
+let rec merge_unique (l1:'a list) (l2:'a list) (cmp:'a -> 'a -> int) : 'a list =
+  match l1, l2 with
+  | [], l2 -> l2
+  | l1, [] -> l1
+  | h1 :: t1, h2 :: t2 -> (
+      match cmp h1 h2 with
+      | 0 -> merge_unique t1 l2 cmp
+      | n when n < 0 -> h1 :: merge_unique t1 l2 cmp
+      | _ -> h2 :: merge_unique l1 t2 cmp
+     )

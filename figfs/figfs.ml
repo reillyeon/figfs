@@ -107,17 +107,19 @@ let commit_getattr (path:string) : Unix.LargeFile.stats =
 
 let ws_getattr (path:string) : Unix.LargeFile.stats =
   let workspace, rest = split_root_path path in
-  try (
-    let exists =
-      try (
-        ignore (traverse_tree (Workspace.base_commit workspace) rest); true
-      ) with Not_found -> false in
-    if Workspace.file_exists workspace rest exists then (
-      let wspath = Workspace.file_path workspace rest in
-      ignore wspath; failwith "ws_getattr"
-    ) else (
-      failwith "ws_getattr"
-    )
+  if rest = "" || rest = "/" then
+    { base_stat with
+      st_kind = Unix.S_DIR;
+      st_perm = 0o755 }
+  else try (
+    match Workspace.stat_file workspace rest with
+    | Workspace.Mode.Exists ->
+        Unix.LargeFile.lstat (Workspace.file_path workspace rest)
+    | Workspace.Mode.Whiteout ->
+        raise Not_found
+    | Workspace.Mode.Unknown ->
+        let base = Workspace.base workspace in
+        commit_getattr (String.concat "" ["/commit/"; base; rest])
   ) with Not_found -> raise (Unix.Unix_error (Unix.ENOENT, "getattr", path))
 
 let ref_getattr (path:string) (refbase:string) : Unix.LargeFile.stats =
@@ -147,6 +149,46 @@ let figfs_getattr (path:string) : Unix.LargeFile.stats =
   else
     raise (Unix.Unix_error (Unix.ENOENT, "getattr", path))
 
+let commit_readlink (path:string) : string =
+  let commit, rest = split_root_path path in
+  try
+    let file = traverse_tree commit rest in
+    match file with
+    | Blob b -> b.b_data
+    | _ -> raise (Unix.Unix_error (Unix.EINVAL, "readlink", path))
+  with Not_found -> raise (Unix.Unix_error (Unix.ENOENT, "readlink", path))
+
+let ws_readlink (path:string) : string =
+  let workspace, rest = split_root_path path in
+  try (
+    match Workspace.stat_file workspace rest with
+    | Workspace.Mode.Exists ->
+        let wsfile = Workspace.file_path workspace rest in
+        Unix.readlink wsfile
+    | Workspace.Mode.Whiteout ->
+        raise Not_found
+    | Workspace.Mode.Unknown ->
+        let base = Workspace.base workspace in
+        commit_readlink (String.concat "" ["/commit/"; base; rest])
+ ) with Not_found -> raise (Unix.Unix_error (Unix.ENOENT, "readlink", path))
+
+let ref_readlink (refbase:string) (path:string) : string =
+  let name, rest = split_root_path path in
+  try
+    let ref = Refs.lookup (String.concat "/" [refbase; name]) in
+    commit_readlink (String.concat "" ["/commit/"; ref.r_target; rest])
+  with Not_found -> raise (Unix.Unix_error (Unix.ENOENT, "readlink", path))
+
+let figfs_readlink (path:string) : string =
+  if starts_with "/commit/" path && String.length path >= 48 then
+    commit_readlink path
+  else if starts_with "/tag/" path && String.length path > 5 then
+    ref_readlink "refs/tags" path
+  else if starts_with "/branch/" path && String.length path > 8 then
+    ref_readlink "refs/heads" path
+  else
+    raise (Unix.Unix_error (Unix.ENOENT, "readlink", path))
+
 let commit_readdir (path:string) : string list =
   let commit, rest = split_root_path path in
   let entries =
@@ -157,6 +199,29 @@ let commit_readdir (path:string) : string list =
       | _ -> raise (Unix.Unix_error (Unix.ENOTDIR, "readdir", path))
     with Not_found -> raise (Unix.Unix_error (Unix.ENOENT, "readdir", path))
   in "." :: ".." :: entries
+
+let ws_readdir (path:string) : string list =
+  let workspace, rest = split_root_path path in
+  try (
+    match Workspace.stat_file workspace rest with
+    | Workspace.Mode.Exists ->
+        let wsfile = Workspace.file_path workspace rest in
+        if Sys.is_directory wsfile
+        then "." :: ".." :: Array.to_list (Sys.readdir wsfile)
+        else raise (Unix.Unix_error (Unix.ENOTDIR, "readdir", path))
+    | Workspace.Mode.Whiteout ->
+        raise Not_found
+    | Workspace.Mode.Unknown ->
+        let base = Workspace.base workspace in
+        let listinga = commit_readdir
+            (String.concat "" ["/commit/"; base; rest]) in
+        let listingb =
+          let wsfile = Workspace.file_path workspace rest in
+          try Array.to_list (Sys.readdir wsfile)
+          with Sys_error _ -> [] in
+        merge_unique (List.sort compare listinga) (List.sort compare listingb)
+          compare
+ ) with Not_found -> raise (Unix.Unix_error (Unix.ENOENT, "readdir", path))
 
 let ref_readdir (refbase:string) (path:string) : string list =
   let name, rest = split_root_path path in
@@ -175,8 +240,10 @@ let refdir_readdir (refbase:string) : string list =
   "." :: ".." :: cat_names
 
 let wsdir_readdir () : string list =
-  let workspaces = Workspace.list () in
-  "." :: ".." :: workspaces
+  try (
+    let workspaces = Workspace.list () in
+    "." :: ".." :: workspaces
+  ) with Failure s -> print s; failwith s
 
 let figfs_readdir (path:string) (fd:int) : string list =
   if starts_with "/commit/" path && String.length path >= 48 then
@@ -185,6 +252,8 @@ let figfs_readdir (path:string) (fd:int) : string list =
     ref_readdir "refs/tags" path
   else if starts_with "/branch/" path && String.length path > 8 then
     ref_readdir "refs/heads" path
+  else if starts_with "/workspace/" path && String.length path > 11 then
+    ws_readdir path
   else if "/tag" = path then
     refdir_readdir "refs/tags"
   else if "/branch" = path then
@@ -197,6 +266,39 @@ let figfs_readdir (path:string) (fd:int) : string list =
     ["."; ".."; "commit"; "tag"; "branch"; "workspace"]
   else
     raise (Unix.Unix_error (Unix.ENOENT, "readdir", path))
+
+let figfs_mknod (path:string) _ : unit =
+  raise (Unix.Unix_error (Unix.EROFS, "mknod", path))
+
+let figfs_mkdir (path:string) (mode:int) : unit =
+  raise (Unix.Unix_error (Unix.EROFS, "mkdir", path))
+
+let figfs_unlink (path:string) : unit =
+  raise (Unix.Unix_error (Unix.EROFS, "unlink", path))
+
+let figfs_rmdir (path:string) : unit =
+  raise (Unix.Unix_error (Unix.EROFS, "rmdir", path))
+
+let figfs_symlink (path:string) (target:string) : unit =
+  raise (Unix.Unix_error (Unix.EROFS, "symlink", path))
+
+let figfs_rename (path:string) (target:string) : unit =
+  raise (Unix.Unix_error (Unix.EROFS, "rename", path))
+
+let figfs_link (path:string) (target:string) : unit =
+  raise (Unix.Unix_error (Unix.EROFS, "link", path))
+
+let figfs_chmod (path:string) (mode:int) : unit =
+  raise (Unix.Unix_error (Unix.EROFS, "chmod", path))
+
+let figfs_chown (path:string) (uid:int) (gid:int) : unit =
+  raise (Unix.Unix_error (Unix.EROFS, "chown", path))
+
+let figfs_truncate (path:string) (size:int64) : unit =
+  raise (Unix.Unix_error (Unix.EROFS, "truncate", path))
+
+let figfs_utime (path:string) (atime:float) (mtime:float) : unit =
+  raise (Unix.Unix_error (Unix.EROFS, "utime", path))
 
 (* Copies the contents of the given string into the given buffer, returning
  * the number of bytes copied. *)
@@ -218,7 +320,7 @@ let static_reader (path:string) (data:string) : Fuse.buffer -> int64 -> int =
       string_to_buffer_blit data offset to_read buf
 
 let static_writer (path:string) : Fuse.buffer -> int64 -> int =
-  fun _ _ -> raise (Unix.Unix_error (Unix.EACCES, "write", path))
+  fun _ _ -> raise (Unix.Unix_error (Unix.EROFS, "write", path))
 
 let static_fopen (path:string) (data:string) : int =
   let fd = new_fd () in
@@ -255,9 +357,6 @@ let figfs_fopen (path:string) (flags:Unix.open_flag list) : int option =
   else
     raise (Unix.Unix_error (Unix.ENOENT, "fopen", path))
 
-let figfs_release (path:string) (flags:Unix.open_flag list) (fd:int) : unit =
-  Hashtbl.remove open_files fd
-
 let figfs_read (path:string) (buf:Fuse.buffer) (off:int64) (fd:int) : int =
   let openfd = Hashtbl.find open_files fd in
   openfd.of_read buf off
@@ -266,41 +365,29 @@ let figfs_write (path:string) (buf:Fuse.buffer) (off:int64) (fd:int) : int =
   let openfd = Hashtbl.find open_files fd in
   openfd.of_write buf off
 
-let commit_readlink (path:string) : string =
-  let commit, rest = split_root_path path in
-  try
-    let file = traverse_tree commit rest in
-    match file with
-    | Blob b -> b.b_data
-    | _ -> raise (Unix.Unix_error (Unix.EINVAL, "readlink", path))
-  with Not_found -> raise (Unix.Unix_error (Unix.ENOENT, "readlink", path))
-
-let ref_readlink (refbase:string) (path:string) : string =
-  let name, rest = split_root_path path in
-  try
-    let ref = Refs.lookup (String.concat "/" [refbase; name]) in
-    commit_readlink (String.concat "" ["/commit/"; ref.r_target; rest])
-  with Not_found -> raise (Unix.Unix_error (Unix.ENOENT, "readlink", path))
-
-let figfs_readlink (path:string) : string =
-  if starts_with "/commit/" path && String.length path >= 48 then
-    commit_readlink path
-  else if starts_with "/tag/" path && String.length path > 5 then
-    ref_readlink "refs/tags" path
-  else if starts_with "/branch/" path && String.length path > 8 then
-    ref_readlink "refs/heads" path
-  else
-    raise (Unix.Unix_error (Unix.ENOENT, "readlink", path))
+let figfs_release (path:string) (flags:Unix.open_flag list) (fd:int) : unit =
+  Hashtbl.remove open_files fd
 
 let operations : Fuse.operations = {
   Fuse.default_operations with
   Fuse.getattr  = figfs_getattr;
+  Fuse.readlink = figfs_readlink;
   Fuse.readdir  = figfs_readdir;
+  Fuse.mknod    = figfs_mknod;
+  Fuse.mkdir    = figfs_mkdir;
+  Fuse.unlink   = figfs_unlink;
+  Fuse.rmdir    = figfs_rmdir;
+  Fuse.symlink  = figfs_symlink;
+  Fuse.rename   = figfs_rename;
+  Fuse.link     = figfs_link;
+  Fuse.chmod    = figfs_chmod;
+  Fuse.chown    = figfs_chown;
+  Fuse.truncate = figfs_truncate;
+  Fuse.utime    = figfs_utime;
   Fuse.fopen    = figfs_fopen;
-  Fuse.release  = figfs_release;
   Fuse.read     = figfs_read;
   Fuse.write    = figfs_write;
-  Fuse.readlink = figfs_readlink
+  Fuse.release  = figfs_release;
 }
 
 let make_absolute path =
@@ -334,10 +421,10 @@ let argrest s =
 let argusage = "usage: figfs [options] mountpoint"
 
 let check_figfs_dir () =
-  let figfs_dir = Filename.concat (get_repo_dir ()) ".figfs" in
+  let figfs_dir = Filename.concat (get_repo_dir ()) "figfs" in
   if Sys.file_exists figfs_dir then (
     if Sys.is_directory figfs_dir then ((* good *))
-    else failwith "Repository contains .figfs, but it isn't a directory."
+    else failwith "Repository contains figfs, but it isn't a directory."
   ) else mkdir figfs_dir 0o755
 
 let main (argv:string array) =
