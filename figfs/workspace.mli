@@ -18,7 +18,8 @@
 
 module Mode : sig
   type t =
-    | Exists
+    | File
+    | Directory of int
     | Whiteout
     | Unknown
 
@@ -36,6 +37,8 @@ val destroy : string -> unit
 val file_path : string -> string -> string
 
 val stat_file : string -> string -> Mode.t
+
+val list_dir : int -> string list -> string list
 
 val create_file : string -> string -> unit
 

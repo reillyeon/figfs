@@ -21,13 +21,15 @@ open Util
 
 module Mode = struct
   type t =
-    | Exists
+    | File
+    | Directory of int
     | Whiteout
     | Unknown
 
   let to_string t : string =
     match t with
-    | Exists -> "Exists"
+    | File -> "File"
+    | Directory i -> Printf.sprintf "Directory %d" i
     | Whiteout -> "Whiteout"
     | Unknown -> "Unknown"
 end
@@ -70,6 +72,7 @@ let destroyWorkspaceQueryHandle : Sqlite3.stmt option ref = ref None
 let clearWorkspaceQueryHandle : Sqlite3.stmt option ref = ref None
 let statFileQueryHandle : Sqlite3.stmt option ref = ref None
 let statWorkspaceQueryHandle : Sqlite3.stmt option ref = ref None
+let listDirQueryHandle : Sqlite3.stmt option ref = ref None
 
 let listQuery = prepareQuery listQueryHandle "SELECT name FROM workspace"
 let addWorkspaceQuery = prepareQuery addWorkspaceQueryHandle
@@ -81,9 +84,11 @@ let destroyWorkspaceQuery = prepareQuery destroyWorkspaceQueryHandle
 let clearWorkspaceQuery = prepareQuery clearWorkspaceQueryHandle
     "DELETE FROM file WHERE workspace = ?"
 let statFileQuery = prepareQuery statFileQueryHandle
-    "SELECT whiteout FROM file WHERE workspace = ? AND name = ?"
+    "SELECT id, directory, whiteout FROM file WHERE workspace = ? AND path = ?"
 let statWorkspaceQuery = prepareQuery statWorkspaceQueryHandle
     "SELECT base FROM workspace WHERE name = ?"
+let listDirQuery = prepareQuery listDirQueryHandle
+    "SELECT name, whiteout FROM file WHERE parent = ?"
 
 let init () : unit =
   let db = db () in
@@ -92,7 +97,7 @@ let init () : unit =
       <> Sqlite3.Rc.OK
   then failwith (Printf.sprintf "sqlite: %s" (Sqlite3.errmsg db));
   if Sqlite3.exec db
-      "CREATE TABLE IF NOT EXISTS file (workspace STRING, name STRING, whiteout BOOLEAN, PRIMARY KEY (workspace, name))"
+      "CREATE TABLE IF NOT EXISTS file (id INTEGER PRIMARY KEY, workspace STRING, path STRING, name STRING, parent INTEGER, directory BOOLEAN, whiteout BOOLEAN)"
       <> Sqlite3.Rc.OK
   then failwith (Printf.sprintf "sqlite: %s" (Sqlite3.errmsg db))
 
@@ -123,11 +128,34 @@ let stat_file (workspace:string) (path:string) : Mode.t =
     let rc = Sqlite3.step stmt in
     if rc = Sqlite3.Rc.ROW
     then (
-      let whiteout = Sqlite3.column stmt 0 in
+      let id =
+        match Sqlite3.column stmt 0 with
+        | Sqlite3.Data.INT i -> Int64.to_int i
+        | _ -> failwith "Expect int for file id." in
+      let directory = Sqlite3.column stmt 1 in
+      let whiteout = Sqlite3.column stmt 2 in
       if whiteout = (Sqlite3.Data.INT 1L) then Mode.Whiteout
-      else Mode.Exists
+      else if directory = (Sqlite3.Data.INT 1L) then (Mode.Directory id)
+      else Mode.File
     ) else if rc = Sqlite3.Rc.DONE then Mode.Unknown
     else failwith (Printf.sprintf "sqlite: %s" (Sqlite3.errmsg (db ())))
+  ) else failwith (Printf.sprintf "sqlite: %s" (Sqlite3.errmsg (db ())))
+
+let list_dir (id:int) (base:string list): string list =
+  let stmt = listDirQuery () in
+  if Sqlite3.reset stmt = Sqlite3.Rc.OK &&
+     Sqlite3.bind stmt 1 (Sqlite3.Data.INT (Int64.of_int id)) = Sqlite3.Rc.OK
+  then (
+    let rec loop accum =
+      if Sqlite3.step stmt = Sqlite3.Rc.ROW
+      then (
+        let name = Sqlite3.Data.to_string (Sqlite3.column stmt 0) in
+        let whiteout = Sqlite3.column stmt 1 in
+        if whiteout = (Sqlite3.Data.INT 1L)
+        then loop (List.filter (fun n -> n <> name) accum)
+        else loop (name :: (List.filter (fun n -> n <> name) accum))
+      ) else accum
+    in loop base
   ) else failwith (Printf.sprintf "sqlite: %s" (Sqlite3.errmsg (db ())))
 
 let create_file (workspace:string) (path:string) : unit =

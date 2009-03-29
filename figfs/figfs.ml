@@ -113,7 +113,9 @@ let ws_getattr (path:string) : Unix.LargeFile.stats =
       st_perm = 0o755 }
   else try (
     match Workspace.stat_file workspace rest with
-    | Workspace.Mode.Exists ->
+    | Workspace.Mode.File ->
+        Unix.LargeFile.lstat (Workspace.file_path workspace rest)
+    | Workspace.Mode.Directory _ ->
         Unix.LargeFile.lstat (Workspace.file_path workspace rest)
     | Workspace.Mode.Whiteout ->
         raise Not_found
@@ -162,9 +164,11 @@ let ws_readlink (path:string) : string =
   let workspace, rest = split_root_path path in
   try (
     match Workspace.stat_file workspace rest with
-    | Workspace.Mode.Exists ->
+    | Workspace.Mode.File ->
         let wsfile = Workspace.file_path workspace rest in
         Unix.readlink wsfile
+    | Workspace.Mode.Directory id ->
+        raise (Unix.Unix_error (Unix.EINVAL, "readlink", path))
     | Workspace.Mode.Whiteout ->
         raise Not_found
     | Workspace.Mode.Unknown ->
@@ -204,23 +208,22 @@ let ws_readdir (path:string) : string list =
   let workspace, rest = split_root_path path in
   try (
     match Workspace.stat_file workspace rest with
-    | Workspace.Mode.Exists ->
-        let wsfile = Workspace.file_path workspace rest in
-        if Sys.is_directory wsfile
-        then "." :: ".." :: Array.to_list (Sys.readdir wsfile)
-        else raise (Unix.Unix_error (Unix.ENOTDIR, "readdir", path))
+    | Workspace.Mode.File ->
+        raise (Unix.Unix_error (Unix.ENOTDIR, "readdir", path))
+    | Workspace.Mode.Directory id ->
+        let base = Workspace.base workspace in
+        let from_git = try (
+          let dir = traverse_tree base rest in
+          match dir with
+          | Tree t -> List.map (fun (_,n,_) -> n) t.t_dirents
+          | _ -> []
+        ) with Not_found -> [] in
+        "." :: ".." :: Workspace.list_dir id from_git
     | Workspace.Mode.Whiteout ->
         raise Not_found
     | Workspace.Mode.Unknown ->
         let base = Workspace.base workspace in
-        let listinga = commit_readdir
-            (String.concat "" ["/commit/"; base; rest]) in
-        let listingb =
-          let wsfile = Workspace.file_path workspace rest in
-          try Array.to_list (Sys.readdir wsfile)
-          with Sys_error _ -> [] in
-        merge_unique (List.sort compare listinga) (List.sort compare listingb)
-          compare
+        commit_readdir (String.concat "" ["/commit/"; base; rest])
  ) with Not_found -> raise (Unix.Unix_error (Unix.ENOENT, "readdir", path))
 
 let ref_readdir (refbase:string) (path:string) : string list =
