@@ -40,7 +40,7 @@ val stat_file : string -> string -> Mode.t
 
 val list_dir : int -> string list -> string list
 
-val create_file : string -> string -> unit
+val create_file : string -> string -> string -> int -> unit
 
 val delete_file : string -> string -> unit
 

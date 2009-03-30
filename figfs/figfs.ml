@@ -107,21 +107,23 @@ let commit_getattr (path:string) : Unix.LargeFile.stats =
 
 let ws_getattr (path:string) : Unix.LargeFile.stats =
   let workspace, rest = split_root_path path in
-  if rest = "" || rest = "/" then
-    { base_stat with
-      st_kind = Unix.S_DIR;
-      st_perm = 0o755 }
-  else try (
-    match Workspace.stat_file workspace rest with
-    | Workspace.Mode.File ->
-        Unix.LargeFile.lstat (Workspace.file_path workspace rest)
-    | Workspace.Mode.Directory _ ->
-        Unix.LargeFile.lstat (Workspace.file_path workspace rest)
-    | Workspace.Mode.Whiteout ->
-        raise Not_found
-    | Workspace.Mode.Unknown ->
-        let base = Workspace.base workspace in
-        commit_getattr (String.concat "" ["/commit/"; base; rest])
+  try (
+    let base = Workspace.base workspace in
+    if rest = "" || rest = "/" then
+      { base_stat with
+        st_kind = Unix.S_DIR;
+        st_perm = 0o755 }
+    else (
+      match Workspace.stat_file workspace rest with
+      | Workspace.Mode.File ->
+          Unix.LargeFile.lstat (Workspace.file_path workspace rest)
+      | Workspace.Mode.Directory _ ->
+          Unix.LargeFile.lstat (Workspace.file_path workspace rest)
+      | Workspace.Mode.Whiteout ->
+          raise Not_found
+      | Workspace.Mode.Unknown ->
+          commit_getattr (String.concat "" ["/commit/"; base; rest])
+    )
   ) with Not_found -> raise (Unix.Unix_error (Unix.ENOENT, "getattr", path))
 
 let ref_getattr (path:string) (refbase:string) : Unix.LargeFile.stats =
@@ -144,7 +146,7 @@ let figfs_getattr (path:string) : Unix.LargeFile.stats =
           "/workspace" = path || "/" = path then
     { base_stat with
       st_kind = Unix.S_DIR;
-      st_perm = 0o755 }
+      st_perm = 0o555 }
   else if "/commit/README" = path then
     { base_stat with
       st_size = Int64.of_int (String.length commit_README) }
@@ -323,40 +325,117 @@ let static_reader (path:string) (data:string) : Fuse.buffer -> int64 -> int =
       string_to_buffer_blit data offset to_read buf
 
 let static_writer (path:string) : Fuse.buffer -> int64 -> int =
-  fun _ _ -> raise (Unix.Unix_error (Unix.EROFS, "write", path))
+  fun _ _ -> raise (Unix.Unix_error (Unix.EBADF, "write", path))
 
-let static_fopen (path:string) (data:string) : int =
+let static_fopen (path:string) (data:string) (flags:Unix.open_flag list): int =
+  if List.mem Unix.O_WRONLY flags ||
+     List.mem Unix.O_RDWR flags
+  then raise (Unix.Unix_error (Unix.EROFS, "fopen", path));
   let fd = new_fd () in
   let openfd = { of_read = static_reader path data;
                  of_write = static_writer path } in
   Hashtbl.add open_files fd openfd;
   fd
 
-let commit_fopen (path:string) : int =
+let commit_fopen (path:string) (flags:Unix.open_flag list) : int =
   let commit, rest = split_root_path path in
   try
     let file = traverse_tree commit rest in
     match file with
-    | Blob b -> static_fopen path b.b_data
+    | Blob b -> static_fopen path b.b_data flags
     | _ -> raise (Unix.Unix_error (Unix.EISDIR, "fopen", path))
   with Not_found -> raise (Unix.Unix_error (Unix.ENOENT, "fopen", path))
 
-let ref_fopen (refbase:string) (path:string) : int =
+type ws_file = {
+    mutable wsf_base : string option;
+    mutable wsf_fd : Unix.file_descr option;
+    wsf_path : string;
+    wsf_mode : int
+  }
+
+let workspace_reader (file:ws_file) : Fuse.buffer -> int64 -> int =
+  fun (buf:Fuse.buffer) (off:int64) ->
+    match file.wsf_fd with
+    | Some fd ->
+        ignore (Unix.LargeFile.lseek fd off Unix.SEEK_SET);
+        Unix_util.read fd buf
+    | None -> (
+        match file.wsf_base with
+        | Some base ->
+            let offset = Int64.to_int off in
+            if offset < 0 || offset >= (String.length base)
+            then raise (Unix.Unix_error (Unix.EINVAL, "read", file.wsf_path))
+            else (
+              let to_read =
+                min (String.length base - offset) (Bigarray.Array1.dim buf) in
+              string_to_buffer_blit base offset to_read buf
+            )
+        | None -> raise (Unix.Unix_error (Unix.EIO, "read", file.wsf_path))
+      )
+
+let workspace_writer (file:ws_file) : Fuse.buffer -> int64 -> int =
+  fun (buf:Fuse.buffer) (off:int64) ->
+    match file.wsf_fd with
+    | Some fd ->
+        ignore (Unix.LargeFile.lseek fd off Unix.SEEK_SET);
+        Unix_util.write fd buf
+    | None -> (
+        match file.wsf_base with
+        | Some base ->
+            let workspace, rest = split_root_path file.wsf_path in
+            Workspace.create_file workspace rest base file.wsf_mode;
+            let fd = Unix.openfile (Workspace.file_path workspace rest)
+                [O_RDWR] file.wsf_mode in
+            file.wsf_fd <- Some fd;
+            ignore (Unix.LargeFile.lseek fd off Unix.SEEK_SET);
+            Unix_util.write fd buf
+        | None -> raise (Unix.Unix_error (Unix.EIO, "write", file.wsf_path))
+      )
+
+let ws_fopen (path:string) (flags:Unix.open_flag list) : int =
+  let workspace, rest = split_root_path path in
+  let wsf = try (
+    match Workspace.stat_file workspace rest with
+    | Workspace.Mode.File ->
+        let fd = Unix.openfile (Workspace.file_path workspace rest) flags 0 in
+        { wsf_base = None; wsf_fd = Some fd; wsf_path = path; wsf_mode = 0 }
+    | Workspace.Mode.Directory id ->
+        raise (Unix.Unix_error (Unix.EISDIR, "fopen", path))
+    | Workspace.Mode.Whiteout ->
+        raise Not_found
+    | Workspace.Mode.Unknown ->
+        let commit = Workspace.base workspace in
+        let file = traverse_tree commit rest in
+        match file with
+        | Blob b ->
+            { wsf_base = Some b.b_data; wsf_fd = None;
+              wsf_path = path; wsf_mode = 0o644 }
+        | _ -> raise (Unix.Unix_error (Unix.EISDIR, "fopen", path))
+  ) with Not_found -> raise (Unix.Unix_error (Unix.ENOENT, "fopen", path)) in
+  let fd = new_fd () in
+  let openfd = { of_read = workspace_reader wsf;
+                 of_write = workspace_writer wsf } in
+  Hashtbl.add open_files fd openfd;
+  fd
+
+let ref_fopen (refbase:string) (path:string) (flags:Unix.open_flag list) : int =
   let name, rest = split_root_path path in
   try
     let ref = Refs.lookup (String.concat "/" [refbase; name]) in
-    commit_fopen (String.concat "" ["/commit/"; ref.r_target; rest])
+    commit_fopen (String.concat "" ["/commit/"; ref.r_target; rest]) flags
   with Not_found -> raise (Unix.Unix_error (Unix.ENOENT, "fopen", path))
 
 let figfs_fopen (path:string) (flags:Unix.open_flag list) : int option =
   if starts_with "/commit/" path && String.length path >= 48 then
-    Some (commit_fopen path)
+    Some (commit_fopen path flags)
   else if starts_with "/tag/" path && String.length path > 5 then
-    Some (ref_fopen "refs/tags" path)
+    Some (ref_fopen "refs/tags" path flags)
   else if starts_with "/branch/" path && String.length path > 5 then
-    Some (ref_fopen "refs/heads" path)
+    Some (ref_fopen "refs/heads" path flags)
+  else if starts_with "/workspace/" path && String.length path > 11 then
+    Some (ws_fopen path flags)
   else if "/commit/README" = path then
-    Some (static_fopen path commit_README)
+    Some (static_fopen path commit_README flags)
   else
     raise (Unix.Unix_error (Unix.ENOENT, "fopen", path))
 

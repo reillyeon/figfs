@@ -65,16 +65,19 @@ let prepareQuery (handle:Sqlite3.stmt option ref) (query:string) ()
       with Sqlite3.Error reason -> failwith (Printf.sprintf "sqlite: %s" reason)
     in handle := Some query; query
 
-let listQueryHandle : Sqlite3.stmt option ref = ref None
-let addWorkspaceQueryHandle : Sqlite3.stmt option ref = ref None
-let existsWorkspaceQueryHandle : Sqlite3.stmt option ref = ref None
+let listQueryHandle             : Sqlite3.stmt option ref = ref None
+let addWorkspaceQueryHandle     : Sqlite3.stmt option ref = ref None
+let existsWorkspaceQueryHandle  : Sqlite3.stmt option ref = ref None
 let destroyWorkspaceQueryHandle : Sqlite3.stmt option ref = ref None
-let clearWorkspaceQueryHandle : Sqlite3.stmt option ref = ref None
-let statFileQueryHandle : Sqlite3.stmt option ref = ref None
-let statWorkspaceQueryHandle : Sqlite3.stmt option ref = ref None
-let listDirQueryHandle : Sqlite3.stmt option ref = ref None
+let clearWorkspaceQueryHandle   : Sqlite3.stmt option ref = ref None
+let statFileQueryHandle         : Sqlite3.stmt option ref = ref None
+let statWorkspaceQueryHandle    : Sqlite3.stmt option ref = ref None
+let listDirQueryHandle          : Sqlite3.stmt option ref = ref None
+let addFileQueryHandle          : Sqlite3.stmt option ref = ref None
+let deleteFileQueryHandle       : Sqlite3.stmt option ref = ref None
 
-let listQuery = prepareQuery listQueryHandle "SELECT name FROM workspace"
+let listQuery = prepareQuery listQueryHandle
+    "SELECT name FROM workspace"
 let addWorkspaceQuery = prepareQuery addWorkspaceQueryHandle
     "INSERT INTO workspace VALUES (?, ?)"
 let existsWorkspaceQuery = prepareQuery existsWorkspaceQueryHandle
@@ -84,11 +87,15 @@ let destroyWorkspaceQuery = prepareQuery destroyWorkspaceQueryHandle
 let clearWorkspaceQuery = prepareQuery clearWorkspaceQueryHandle
     "DELETE FROM file WHERE workspace = ?"
 let statFileQuery = prepareQuery statFileQueryHandle
-    "SELECT id, directory, whiteout FROM file WHERE workspace = ? AND path = ?"
+    "SELECT rowid, directory, whiteout FROM file WHERE workspace = ? AND path = ?"
 let statWorkspaceQuery = prepareQuery statWorkspaceQueryHandle
     "SELECT base FROM workspace WHERE name = ?"
 let listDirQuery = prepareQuery listDirQueryHandle
     "SELECT name, whiteout FROM file WHERE parent = ?"
+let addFileQuery = prepareQuery addFileQueryHandle
+    "INSERT INTO file (workspace, path, name, parent, directory, whiteout) VALUES (?, ?, ?, ?, ?, ?)"
+let deleteFileQuery = prepareQuery deleteFileQueryHandle
+    "DELETE FROM file WHERE workspace = ? AND path = ?"
 
 let init () : unit =
   let db = db () in
@@ -114,7 +121,22 @@ let list () : string list =
 
 let create (name:string) (hash:string) : unit =
   Unix.mkdir (file_dir name) 0o755;
-  failwith "Workspace.create"
+  let stmt1 = addWorkspaceQuery () in
+  if Sqlite3.reset stmt1 = Sqlite3.Rc.OK &&
+     Sqlite3.bind stmt1 1 (Sqlite3.Data.TEXT name) = Sqlite3.Rc.OK &&
+     Sqlite3.bind stmt1 2 (Sqlite3.Data.TEXT hash) = Sqlite3.Rc.OK &&
+     Sqlite3.step stmt1 = Sqlite3.Rc.DONE then ()
+  else failwith (Printf.sprintf "sqlite: %s" (Sqlite3.errmsg (db ())));
+  let stmt2 = addFileQuery () in
+  if Sqlite3.reset stmt2 = Sqlite3.Rc.OK &&
+     Sqlite3.bind stmt2 1 (Sqlite3.Data.TEXT name) = Sqlite3.Rc.OK &&
+     Sqlite3.bind stmt2 2 (Sqlite3.Data.TEXT "/") = Sqlite3.Rc.OK &&
+     Sqlite3.bind stmt2 3 (Sqlite3.Data.TEXT "") = Sqlite3.Rc.OK &&
+     Sqlite3.bind stmt2 4 (Sqlite3.Data.INT (-1L)) = Sqlite3.Rc.OK &&
+     Sqlite3.bind stmt2 5 (Sqlite3.Data.INT 1L) = Sqlite3.Rc.OK &&
+     Sqlite3.bind stmt2 6 (Sqlite3.Data.INT 0L) = Sqlite3.Rc.OK &&
+     Sqlite3.step stmt2 = Sqlite3.Rc.DONE then ()
+  else failwith (Printf.sprintf "sqlite: %s" (Sqlite3.errmsg (db ())))
 
 let destroy (name:string) : unit =
   failwith "Workspace.destroy"
@@ -158,8 +180,74 @@ let list_dir (id:int) (base:string list): string list =
     in loop base
   ) else failwith (Printf.sprintf "sqlite: %s" (Sqlite3.errmsg (db ())))
 
-let create_file (workspace:string) (path:string) : unit =
-  failwith "Workspace.create_file"
+let add_db_file (workspace:string) (parent:int) (path:string) (dir:bool)
+    (whiteout:bool) : int =
+  let parent = Int64.of_int parent in
+  let dir = if dir then 1L else 0L in
+  let whiteout = if whiteout then 1L else 0L in
+  let name = Filename.basename path in
+  let stmt = addFileQuery () in
+  if Sqlite3.reset stmt = Sqlite3.Rc.OK &&
+     Sqlite3.bind stmt 1 (Sqlite3.Data.TEXT workspace) = Sqlite3.Rc.OK &&
+     Sqlite3.bind stmt 2 (Sqlite3.Data.TEXT path) = Sqlite3.Rc.OK &&
+     Sqlite3.bind stmt 3 (Sqlite3.Data.TEXT name) = Sqlite3.Rc.OK &&
+     Sqlite3.bind stmt 4 (Sqlite3.Data.INT parent) = Sqlite3.Rc.OK &&
+     Sqlite3.bind stmt 5 (Sqlite3.Data.INT dir) = Sqlite3.Rc.OK &&
+     Sqlite3.bind stmt 6 (Sqlite3.Data.INT whiteout) = Sqlite3.Rc.OK &&
+     Sqlite3.step stmt = Sqlite3.Rc.DONE then ()
+  else failwith (Printf.sprintf "sqlite: %s" (Sqlite3.errmsg (db ())));
+  Int64.to_int (Sqlite3.last_insert_rowid (db ()))
+
+let delete_db_file (workspace:string) (path:string) : unit =
+  let stmt = deleteFileQuery () in
+  if Sqlite3.reset stmt = Sqlite3.Rc.OK &&
+     Sqlite3.bind stmt 1 (Sqlite3.Data.TEXT workspace) = Sqlite3.Rc.OK &&
+     Sqlite3.bind stmt 2 (Sqlite3.Data.TEXT path) = Sqlite3.Rc.OK &&
+     Sqlite3.step stmt = Sqlite3.Rc.DONE then ()
+  else failwith (Printf.sprintf "sqlite: %s" (Sqlite3.errmsg (db ())))
+
+let rec create_path (path:string) (names:string list) : unit =
+    match names with
+    | h1 :: h2 :: rest ->
+        let new_path = Filename.concat path h1 in
+        if not (Sys.file_exists new_path)
+        then Unix.mkdir new_path 0o755;
+        create_path new_path (h2 :: rest)
+    | _ -> ()
+
+let rec create_db_path (workspace:string) (parent:int) (path:string)
+    (names:string list) : int =
+    match names with
+    | h1 :: h2 :: rest -> (
+        let new_path = Filename.concat path h1 in
+        match stat_file workspace new_path with
+        | Mode.File -> failwith "Path component not a directory."
+        | Mode.Directory id ->
+            create_db_path workspace id new_path (h2 :: rest)
+        | Mode.Whiteout ->
+            delete_db_file workspace new_path;
+            let new_id = add_db_file workspace parent new_path true false in
+            create_db_path workspace new_id new_path (h2 :: rest)
+        | Mode.Unknown ->
+            let new_id = add_db_file workspace parent new_path true false in
+            create_db_path workspace new_id new_path (h2 :: rest)
+      )
+    | _ -> parent
+
+let create_file (workspace:string) (path:string) (data:string) (mode:int)
+    : unit =
+  let path_elems = split path '/' in
+  create_path (file_dir workspace) path_elems;
+  let wsfile = file_path workspace path in
+  let fd = open_out wsfile in
+  output_string fd data;
+  close_out fd;
+  let root =
+    match stat_file workspace "/" with
+    | Mode.Directory id -> id
+    | _ -> failwith "Something is wrong, root directory isn't a directory." in
+  let dir = create_db_path workspace root "/" path_elems in
+  ignore (add_db_file (workspace:string) dir path false false)
 
 let delete_file (workspace:string) (path:string) : unit =
   failwith "Workspace.delete_file"
@@ -167,7 +255,10 @@ let delete_file (workspace:string) (path:string) : unit =
 let base (workspace:string) : string =
   let stmt = statWorkspaceQuery () in
   if Sqlite3.reset stmt = Sqlite3.Rc.OK &&
-     Sqlite3.bind stmt 1 (Sqlite3.Data.TEXT workspace) = Sqlite3.Rc.OK &&
-     Sqlite3.step stmt = Sqlite3.Rc.ROW
-  then Sqlite3.Data.to_string (Sqlite3.column stmt 0)
-  else failwith (Printf.sprintf "sqlite: %s" (Sqlite3.errmsg (db ())))
+     Sqlite3.bind stmt 1 (Sqlite3.Data.TEXT workspace) = Sqlite3.Rc.OK
+  then (
+    match Sqlite3.step stmt with
+    | Sqlite3.Rc.ROW -> Sqlite3.Data.to_string (Sqlite3.column stmt 0)
+    | Sqlite3.Rc.DONE -> raise Not_found
+    | _ -> failwith (Printf.sprintf "sqlite: %s" (Sqlite3.errmsg (db ())))
+  ) else failwith (Printf.sprintf "sqlite: %s" (Sqlite3.errmsg (db ())))
