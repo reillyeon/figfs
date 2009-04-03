@@ -272,38 +272,152 @@ let figfs_readdir (path:string) (fd:int) : string list =
   else
     raise (Unix.Unix_error (Unix.ENOENT, "readdir", path))
 
-let figfs_mknod (path:string) _ : unit =
-  raise (Unix.Unix_error (Unix.EROFS, "mknod", path))
+let ws_mknod (path:string) (mode:int) : unit =
+  let workspace, rest = split_root_path path in
+  try (
+    let base = Workspace.base workspace in
+    match Workspace.stat_file workspace rest with
+    | Workspace.Mode.File ->
+        raise (Unix.Unix_error (Unix.EEXIST, "mknod", path))
+    | Workspace.Mode.Directory id ->
+        raise (Unix.Unix_error (Unix.EEXIST, "mknod", path))
+    | Workspace.Mode.Whiteout ->
+        Workspace.create_file workspace rest "" mode
+    | Workspace.Mode.Unknown ->
+        try (
+          ignore (traverse_tree base rest);
+          raise (Unix.Unix_error (Unix.EEXIST, "mknod", path))
+        ) with Not_found -> Workspace.create_file workspace rest "" mode
+  ) with Not_found -> raise (Unix.Unix_error (Unix.ENOENT, "mknod", path))
+
+let figfs_mknod (path:string) (mode:int) : unit =
+  if starts_with "/workspace/" path && String.length path > 11 then
+    ws_mknod path mode
+  else
+    raise (Unix.Unix_error (Unix.EROFS, "mknod", path))
 
 let figfs_mkdir (path:string) (mode:int) : unit =
-  raise (Unix.Unix_error (Unix.EROFS, "mkdir", path))
+  raise (Unix.Unix_error (Unix.ENOSYS, "mkdir", path))
 
 let figfs_unlink (path:string) : unit =
   raise (Unix.Unix_error (Unix.EROFS, "unlink", path))
 
 let figfs_rmdir (path:string) : unit =
-  raise (Unix.Unix_error (Unix.EROFS, "rmdir", path))
+  raise (Unix.Unix_error (Unix.ENOSYS, "rmdir", path))
 
 let figfs_symlink (path:string) (target:string) : unit =
-  raise (Unix.Unix_error (Unix.EROFS, "symlink", path))
+  raise (Unix.Unix_error (Unix.ENOSYS, "symlink", path))
 
 let figfs_rename (path:string) (target:string) : unit =
-  raise (Unix.Unix_error (Unix.EROFS, "rename", path))
+  raise (Unix.Unix_error (Unix.ENOSYS, "rename", path))
 
 let figfs_link (path:string) (target:string) : unit =
-  raise (Unix.Unix_error (Unix.EROFS, "link", path))
+  raise (Unix.Unix_error (Unix.ENOSYS, "link", path))
+
+let ws_chmod (path:string) (mode:int) : unit =
+  let workspace, rest = split_root_path path in
+  try (
+    let base = Workspace.base workspace in
+    match Workspace.stat_file workspace rest with
+    | Workspace.Mode.File ->
+        Unix.chmod (Workspace.file_path workspace rest) mode
+    | Workspace.Mode.Directory _ ->
+        Unix.chmod (Workspace.file_path workspace rest) mode
+    | Workspace.Mode.Whiteout ->
+        raise (Unix.Unix_error (Unix.ENOENT, "chmod", path))
+    | Workspace.Mode.Unknown ->
+        match traverse_tree base rest with
+        | Blob b -> Workspace.create_file workspace rest b.b_data mode
+        | Tree t -> Workspace.create_dir workspace rest mode
+        | _ -> raise (Unix.Unix_error (Unix.EACCES, "chmod", path))
+  ) with Not_found -> raise (Unix.Unix_error (Unix.ENOENT, "chmod", path))
 
 let figfs_chmod (path:string) (mode:int) : unit =
-  raise (Unix.Unix_error (Unix.EROFS, "chmod", path))
+  if starts_with "/workspace/" path && String.length path > 11 then
+    ws_chmod path mode
+  else
+    raise (Unix.Unix_error (Unix.EROFS, "chmod", path))
+
+let ws_chown (path:string) _ _ : unit =
+  let workspace, rest = split_root_path path in
+  try (
+    let base = Workspace.base workspace in
+    match Workspace.stat_file workspace rest with
+    | Workspace.Mode.File ->
+        raise (Unix.Unix_error (Unix.EACCES, "chown", path))
+    | Workspace.Mode.Directory _ ->
+        raise (Unix.Unix_error (Unix.EACCES, "chown", path))
+    | Workspace.Mode.Whiteout ->
+        raise (Unix.Unix_error (Unix.ENOENT, "chown", path))
+    | Workspace.Mode.Unknown ->
+        ignore (traverse_tree base rest);
+        raise (Unix.Unix_error (Unix.EACCES, "chown", path))
+  ) with Not_found -> raise (Unix.Unix_error (Unix.ENOENT, "chown", path))
 
 let figfs_chown (path:string) (uid:int) (gid:int) : unit =
-  raise (Unix.Unix_error (Unix.EROFS, "chown", path))
+  if starts_with "/workspace/" path && String.length path > 11 then
+    ws_chown path uid gid
+  else
+    raise (Unix.Unix_error (Unix.EROFS, "chown", path))
+
+let ws_truncate (path:string) (size:int64) : unit =
+  let workspace, rest = split_root_path path in
+  try (
+    let base = Workspace.base workspace in
+    match Workspace.stat_file workspace rest with
+    | Workspace.Mode.File ->
+        Unix.LargeFile.truncate (Workspace.file_path workspace rest) size
+    | Workspace.Mode.Directory _ ->
+        raise (Unix.Unix_error (Unix.EISDIR, "truncate", path))
+    | Workspace.Mode.Whiteout ->
+        raise (Unix.Unix_error (Unix.ENOENT, "truncate", path))
+    | Workspace.Mode.Unknown ->
+        match traverse_tree base rest with
+        | Blob b ->
+            if Int64.compare size 0L < 0
+            then raise (Unix.Unix_error (Unix.EINVAL, "truncate", path));
+            let int_size = Int64.to_int size in
+            let buf = String.create int_size in
+            let to_copy = min int_size (String.length b.b_data) in
+            String.blit b.b_data 0 buf 0 to_copy;
+            String.fill b.b_data to_copy (int_size - to_copy) '\x00';
+            Workspace.create_file workspace rest buf 0o644
+        | _ -> raise (Unix.Unix_error (Unix.EISDIR, "truncate", path))
+  ) with Not_found -> raise (Unix.Unix_error (Unix.ENOENT, "truncate", path))
 
 let figfs_truncate (path:string) (size:int64) : unit =
-  raise (Unix.Unix_error (Unix.EROFS, "truncate", path))
+  if starts_with "/workspace/" path && String.length path > 11 then
+    ws_truncate path size
+  else
+    raise (Unix.Unix_error (Unix.EROFS, "truncate", path))
+
+let ws_utime (path:string) (atime:float) (mtime:float) : unit =
+  let workspace, rest = split_root_path path in
+  try (
+    let base = Workspace.base workspace in
+    match Workspace.stat_file workspace rest with
+    | Workspace.Mode.File ->
+        Unix.utimes (Workspace.file_path workspace rest) atime mtime
+    | Workspace.Mode.Directory _ ->
+        Unix.utimes (Workspace.file_path workspace rest) atime mtime
+    | Workspace.Mode.Whiteout ->
+        raise (Unix.Unix_error (Unix.ENOENT, "utime", path))
+    | Workspace.Mode.Unknown ->
+        match traverse_tree base rest with
+        | Blob b ->
+            Workspace.create_file workspace rest b.b_data 0o644;
+            Unix.utimes (Workspace.file_path workspace rest) atime mtime
+        | Tree t ->
+            Workspace.create_dir workspace rest 0o755;
+            Unix.utimes (Workspace.file_path workspace rest) atime mtime
+        | _ -> raise (Unix.Unix_error (Unix.EACCES, "utime", path))
+  ) with Not_found -> raise (Unix.Unix_error (Unix.ENOENT, "utime", path))
 
 let figfs_utime (path:string) (atime:float) (mtime:float) : unit =
-  raise (Unix.Unix_error (Unix.EROFS, "utime", path))
+  if starts_with "/workspace/" path && String.length path > 11 then
+    ws_utime path atime mtime
+  else
+    raise (Unix.Unix_error (Unix.ENOSYS, "utime", path))
 
 (* Copies the contents of the given string into the given buffer, returning
  * the number of bytes copied. *)

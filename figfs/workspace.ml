@@ -247,10 +247,25 @@ let create_file (workspace:string) (path:string) (data:string) (mode:int)
     | Mode.Directory id -> id
     | _ -> failwith "Something is wrong, root directory isn't a directory." in
   let dir = create_db_path workspace root "/" path_elems in
-  ignore (add_db_file (workspace:string) dir path false false)
+  ignore (add_db_file workspace dir path false false)
 
 let delete_file (workspace:string) (path:string) : unit =
   failwith "Workspace.delete_file"
+
+let create_dir (workspace:string) (path:string) (mode:int) : unit =
+  let path_elems = split path '/' in
+  create_path (file_dir workspace) path_elems;
+  let wsfile = file_path workspace path in
+  Unix.mkdir wsfile mode;
+  let root =
+    match stat_file workspace "/" with
+    | Mode.Directory id -> id
+    | _ -> failwith "Something is wrong, root directory isn't a directory." in
+  let dir = create_db_path workspace root "/" path_elems in
+  ignore (add_db_file workspace dir path true false)
+
+let delete_dir (workspace:string) (path:string) : unit =
+  failwith "Workspace.delete_dir"
 
 let base (workspace:string) : string =
   let stmt = statWorkspaceQuery () in

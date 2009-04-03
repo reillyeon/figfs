@@ -44,4 +44,8 @@ val create_file : string -> string -> string -> int -> unit
 
 val delete_file : string -> string -> unit
 
+val create_dir : string -> string -> int -> unit
+
+val delete_dir : string -> string -> unit
+
 val base : string -> string
