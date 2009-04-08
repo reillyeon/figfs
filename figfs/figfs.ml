@@ -1,5 +1,5 @@
 (* Filesystem Interface to Git.
- * Copyright (C) 2008 Reilly Grant
+ * Copyright (C) 2008-2009 Reilly Grant
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -115,8 +115,7 @@ let ws_getattr (path:string) : Unix.LargeFile.stats =
         st_perm = 0o755 }
     else (
       match Workspace.stat_file workspace rest with
-      | Workspace.Mode.File ->
-          Unix.LargeFile.lstat (Workspace.file_path workspace rest)
+      | Workspace.Mode.File
       | Workspace.Mode.Directory _ ->
           Unix.LargeFile.lstat (Workspace.file_path workspace rest)
       | Workspace.Mode.Whiteout ->
@@ -277,9 +276,8 @@ let ws_mknod (path:string) (mode:int) : unit =
   try (
     let base = Workspace.base workspace in
     match Workspace.stat_file workspace rest with
-    | Workspace.Mode.File ->
-        raise (Unix.Unix_error (Unix.EEXIST, "mknod", path))
-    | Workspace.Mode.Directory id ->
+    | Workspace.Mode.File
+    | Workspace.Mode.Directory _ ->
         raise (Unix.Unix_error (Unix.EEXIST, "mknod", path))
     | Workspace.Mode.Whiteout ->
         Workspace.create_file workspace rest "" mode
@@ -296,14 +294,78 @@ let figfs_mknod (path:string) (mode:int) : unit =
   else
     raise (Unix.Unix_error (Unix.EROFS, "mknod", path))
 
+let ws_mkdir (path:string) (mode:int) : unit =
+  let workspace, rest = split_root_path path in
+  try (
+    ignore (Workspace.base workspace);
+    match Workspace.stat_file workspace rest with
+    | Workspace.Mode.File
+    | Workspace.Mode.Directory _ ->
+        raise (Unix.Unix_error (Unix.EEXIST, "mkdir", path))
+    | Workspace.Mode.Whiteout
+    | Workspace.Mode.Unknown ->
+        Workspace.create_dir workspace rest mode
+  ) with Not_found -> raise (Unix.Unix_error (Unix.ENOENT, "mkdir", path))
+
 let figfs_mkdir (path:string) (mode:int) : unit =
-  raise (Unix.Unix_error (Unix.ENOSYS, "mkdir", path))
+  if starts_with "/workspace/" path && String.length path > 11 then
+    ws_mkdir path mode
+  else
+    raise (Unix.Unix_error (Unix.EROFS, "mkdir", path))
+
+let ws_unlink (path:string) : unit =
+  let workspace, rest = split_root_path path in
+  try (
+    let base = Workspace.base workspace in
+    match Workspace.stat_file workspace rest with
+    | Workspace.Mode.File -> (
+        Workspace.delete_file workspace rest;
+        try (
+          ignore (traverse_tree base rest);
+          Workspace.whiteout_file workspace rest
+        ) with Not_found -> ()
+      )
+    | Workspace.Mode.Directory _ ->
+        raise (Unix.Unix_error (Unix.EISDIR, "unlink", path))
+    | Workspace.Mode.Whiteout -> raise Not_found
+    | Workspace.Mode.Unknown ->
+        match type_of_obj (traverse_tree base rest) with
+        | TBlob -> Workspace.whiteout_file workspace rest
+        | _ -> raise (Unix.Unix_error (Unix.EISDIR, "unlink", path))
+  ) with Not_found -> raise (Unix.Unix_error (Unix.ENOENT, "unlink", path))
 
 let figfs_unlink (path:string) : unit =
-  raise (Unix.Unix_error (Unix.EROFS, "unlink", path))
+  if starts_with "/workspace/" path && String.length path > 11 then
+    ws_unlink path
+  else
+    raise (Unix.Unix_error (Unix.EROFS, "unlink", path))
+
+let ws_rmdir (path:string) : unit =
+  let workspace, rest = split_root_path path in
+  try (
+    let base = Workspace.base workspace in
+    match Workspace.stat_file workspace rest with
+    | Workspace.Mode.File ->
+        raise (Unix.Unix_error (Unix.ENOTDIR, "rmdir", path))
+    | Workspace.Mode.Directory _ -> (
+        Workspace.delete_dir workspace rest;
+        try (
+          ignore (traverse_tree base rest);
+          Workspace.whiteout_dir workspace rest
+        ) with Not_found -> ()
+      )
+    | Workspace.Mode.Whiteout -> raise Not_found
+    | Workspace.Mode.Unknown ->
+        match type_of_obj (traverse_tree base rest) with
+        | TTree -> Workspace.whiteout_dir workspace rest
+        | _ -> raise (Unix.Unix_error (Unix.ENOTDIR, "rmdir", path))
+  ) with Not_found -> raise (Unix.Unix_error (Unix.ENOENT, "rmdir", path))
 
 let figfs_rmdir (path:string) : unit =
-  raise (Unix.Unix_error (Unix.ENOSYS, "rmdir", path))
+  if starts_with "/workspace/" path && String.length path > 11 then
+    ws_rmdir path
+  else
+    raise (Unix.Unix_error (Unix.EROFS, "rmdir", path))
 
 let figfs_symlink (path:string) (target:string) : unit =
   raise (Unix.Unix_error (Unix.ENOSYS, "symlink", path))
@@ -417,7 +479,7 @@ let figfs_utime (path:string) (atime:float) (mtime:float) : unit =
   if starts_with "/workspace/" path && String.length path > 11 then
     ws_utime path atime mtime
   else
-    raise (Unix.Unix_error (Unix.ENOSYS, "utime", path))
+    raise (Unix.Unix_error (Unix.EROFS, "utime", path))
 
 (* Copies the contents of the given string into the given buffer, returning
  * the number of bytes copied. *)

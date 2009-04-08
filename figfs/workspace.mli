@@ -48,4 +48,8 @@ val create_dir : string -> string -> int -> unit
 
 val delete_dir : string -> string -> unit
 
+val whiteout_file : string -> string -> unit
+
+val whiteout_dir : string -> string -> unit
+
 val base : string -> string
