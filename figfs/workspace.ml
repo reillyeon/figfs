@@ -142,7 +142,24 @@ let create (name:string) (hash:string) : unit =
   else failwith (Printf.sprintf "sqlite: %s" (Sqlite3.errmsg (db ())))
 
 let destroy (name:string) : unit =
-  failwith "Workspace.destroy"
+  let stmt1 = clearWorkspaceQuery () in
+  if Sqlite3.bind stmt1 1 (Sqlite3.Data.TEXT name) = Sqlite3.Rc.OK &&
+     Sqlite3.step stmt1 = Sqlite3.Rc.DONE
+  then ignore (Sqlite3.reset stmt1)
+  else failwith (Printf.sprintf "sqlite: %s" (Sqlite3.errmsg (db ())));
+  let stmt2 = destroyWorkspaceQuery () in
+  if Sqlite3.bind stmt2 1 (Sqlite3.Data.TEXT name) = Sqlite3.Rc.OK &&
+     Sqlite3.step stmt2 = Sqlite3.Rc.DONE
+  then ignore (Sqlite3.reset stmt2)
+  else failwith (Printf.sprintf "sqlite: %s" (Sqlite3.errmsg (db ())));
+  let rec loop (path:string) =
+    if (Sys.is_directory path)
+    then (
+      let contents = Sys.readdir path in
+      Array.iter (fun n -> loop (Filename.concat path n)) contents;
+      Unix.rmdir path
+    ) else Unix.unlink path
+  in loop (file_dir name)
 
 let stat_file (workspace:string) (path:string) : Mode.t =
   let stmt = statFileQuery () in
@@ -310,8 +327,11 @@ let base (workspace:string) : string =
   then (
     let result =
       match Sqlite3.step stmt with
-      | Sqlite3.Rc.ROW -> Sqlite3.Data.to_string (Sqlite3.column stmt 0)
-      | Sqlite3.Rc.DONE -> raise Not_found
+      | Sqlite3.Rc.ROW ->
+          Sqlite3.Data.to_string (Sqlite3.column stmt 0)
+      | Sqlite3.Rc.DONE ->
+          ignore (Sqlite3.reset stmt);
+          raise Not_found
       | _ -> failwith (Printf.sprintf "sqlite: %s" (Sqlite3.errmsg (db ())))
     in ignore (Sqlite3.reset stmt); result
   ) else failwith (Printf.sprintf "sqlite: %s" (Sqlite3.errmsg (db ())))

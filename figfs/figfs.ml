@@ -133,7 +133,11 @@ let ref_getattr (path:string) (refbase:string) : Unix.LargeFile.stats =
   with Not_found -> raise (Unix.Unix_error (Unix.ENOENT, "getattr", path))
 
 let figfs_getattr (path:string) : Unix.LargeFile.stats =
-  if starts_with "/commit/" path && String.length path >= 48 then
+  if ends_with "/.figfs_ctrl" path then
+    { base_stat with
+      st_kind = Unix.S_REG;
+      st_perm = 0o644 }
+  else if starts_with "/commit/" path && String.length path >= 48 then
     commit_getattr path
   else if starts_with "/tag/" path && String.length path > 5 then
     ref_getattr path "refs/tags"
@@ -448,7 +452,9 @@ let ws_truncate (path:string) (size:int64) : unit =
   ) with Not_found -> raise (Unix.Unix_error (Unix.ENOENT, "truncate", path))
 
 let figfs_truncate (path:string) (size:int64) : unit =
-  if starts_with "/workspace/" path && String.length path > 11 then
+  if ends_with "/.figfs_ctrl" path then
+    ()
+  else if starts_with "/workspace/" path && String.length path > 11 then
     ws_truncate path size
   else
     raise (Unix.Unix_error (Unix.EROFS, "truncate", path))
@@ -476,7 +482,9 @@ let ws_utime (path:string) (atime:float) (mtime:float) : unit =
   ) with Not_found -> raise (Unix.Unix_error (Unix.ENOENT, "utime", path))
 
 let figfs_utime (path:string) (atime:float) (mtime:float) : unit =
-  if starts_with "/workspace/" path && String.length path > 11 then
+  if ends_with "/.figfs_ctrl" path then
+    ()
+  else if starts_with "/workspace/" path && String.length path > 11 then
     ws_utime path atime mtime
   else
     raise (Unix.Unix_error (Unix.EROFS, "utime", path))
@@ -489,6 +497,13 @@ let string_to_buffer_blit (str:string) (start:int) (len:int) (buf:Fuse.buffer)
     Bigarray.Array1.set buf (i - start) (String.get str i)
   done;
   len
+
+let string_of_buffer (buf:Fuse.buffer) : string =
+  let str = String.create (Bigarray.Array1.dim buf) in
+  for i = 0 to (Bigarray.Array1.dim buf - 1) do
+    String.set str i (Bigarray.Array1.get buf i)
+  done;
+  str
 
 let static_reader (path:string) (data:string) : Fuse.buffer -> int64 -> int =
   fun (buf:Fuse.buffer) (off:int64) ->
@@ -521,6 +536,40 @@ let commit_fopen (path:string) (flags:Unix.open_flag list) : int =
     | Blob b -> static_fopen path b.b_data flags
     | _ -> raise (Unix.Unix_error (Unix.EISDIR, "fopen", path))
   with Not_found -> raise (Unix.Unix_error (Unix.ENOENT, "fopen", path))
+
+let ctrl_reader (commit:string) : Fuse.buffer -> int64 -> int =
+  fun (buf:Fuse.buffer) (off:int64) ->
+    raise (Unix.Unix_error (Unix.EINVAL, "read", ""))
+
+let ctrl_writer (commit:string) : Fuse.buffer -> int64 -> int =
+  fun (buf:Fuse.buffer) (off:int64) ->
+    let str = string_of_buffer buf in
+    if off <> 0L
+    then raise (Unix.Unix_error (Unix.EINVAL, "write", ""))
+    else (
+      match Command.cmd_of_string str with
+      | Some cmd -> (
+        match cmd with
+        | Command.CreateWorkspace (name, base) -> Workspace.create name base
+        | Command.DestroyWorkspace name -> Workspace.destroy name
+      )
+      | None -> raise (Unix.Unix_error (Unix.EINVAL, "write", ""))
+    );
+    String.length str
+
+let ctrl_fopen (path:string) : int =
+  let base =
+    if starts_with "/workspace/" path && String.length path > 11
+    then (
+      let workspace, rest = split_root_path path in
+      try Workspace.base workspace
+      with Not_found -> raise (Unix.Unix_error (Unix.ENOENT, "fopen", path))
+    ) else "" in
+  let fd = new_fd () in
+  let openfd = { of_read = ctrl_reader base;
+                 of_write = ctrl_writer base } in
+  Hashtbl.add open_files fd openfd;
+  fd
 
 type ws_file = {
     mutable wsf_base : string option;
@@ -570,29 +619,30 @@ let workspace_writer (file:ws_file) : Fuse.buffer -> int64 -> int =
 
 let ws_fopen (path:string) (flags:Unix.open_flag list) : int =
   let workspace, rest = split_root_path path in
-  let wsf = try (
-    match Workspace.stat_file workspace rest with
-    | Workspace.Mode.File ->
-        let fd = Unix.openfile (Workspace.file_path workspace rest) flags 0 in
-        { wsf_base = None; wsf_fd = Some fd; wsf_path = path; wsf_mode = 0 }
-    | Workspace.Mode.Directory id ->
-        raise (Unix.Unix_error (Unix.EISDIR, "fopen", path))
-    | Workspace.Mode.Whiteout ->
-        raise Not_found
-    | Workspace.Mode.Unknown ->
-        let commit = Workspace.base workspace in
-        let file = traverse_tree commit rest in
-        match file with
-        | Blob b ->
-            { wsf_base = Some b.b_data; wsf_fd = None;
-              wsf_path = path; wsf_mode = 0o644 }
-        | _ -> raise (Unix.Unix_error (Unix.EISDIR, "fopen", path))
-  ) with Not_found -> raise (Unix.Unix_error (Unix.ENOENT, "fopen", path)) in
-  let fd = new_fd () in
-  let openfd = { of_read = workspace_reader wsf;
-                 of_write = workspace_writer wsf } in
-  Hashtbl.add open_files fd openfd;
-  fd
+  try (
+    let base = Workspace.base workspace in
+    let wsf =
+      match Workspace.stat_file workspace rest with
+      | Workspace.Mode.File ->
+          let fd = Unix.openfile (Workspace.file_path workspace rest) flags 0 in
+          { wsf_base = None; wsf_fd = Some fd; wsf_path = path; wsf_mode = 0 }
+      | Workspace.Mode.Directory id ->
+          raise (Unix.Unix_error (Unix.EISDIR, "fopen", path))
+      | Workspace.Mode.Whiteout ->
+          raise Not_found
+      | Workspace.Mode.Unknown ->
+          let file = traverse_tree base rest in
+          match file with
+          | Blob b ->
+              { wsf_base = Some b.b_data; wsf_fd = None;
+                wsf_path = path; wsf_mode = 0o644 }
+          | _ -> raise (Unix.Unix_error (Unix.EISDIR, "fopen", path)) in
+    let fd = new_fd () in
+    let openfd = { of_read = workspace_reader wsf;
+                   of_write = workspace_writer wsf } in
+    Hashtbl.add open_files fd openfd;
+    fd
+  ) with Not_found -> raise (Unix.Unix_error (Unix.ENOENT, "fopen", path))
 
 let ref_fopen (refbase:string) (path:string) (flags:Unix.open_flag list) : int =
   let name, rest = split_root_path path in
@@ -602,7 +652,9 @@ let ref_fopen (refbase:string) (path:string) (flags:Unix.open_flag list) : int =
   with Not_found -> raise (Unix.Unix_error (Unix.ENOENT, "fopen", path))
 
 let figfs_fopen (path:string) (flags:Unix.open_flag list) : int option =
-  if starts_with "/commit/" path && String.length path >= 48 then
+  if ends_with "/.figfs_ctrl" path then
+    Some (ctrl_fopen path)
+  else if starts_with "/commit/" path && String.length path >= 48 then
     Some (commit_fopen path flags)
   else if starts_with "/tag/" path && String.length path > 5 then
     Some (ref_fopen "refs/tags" path flags)
@@ -656,48 +708,43 @@ let make_absolute path =
   then Printf.sprintf "%s/%s" (Sys.getcwd ()) path
   else path
 
-let repo_dir = ref (find_repo ())
-
-let fuse_opts = ref []
-
-let argspec =
-  [("-r", Arg.String (fun s -> repo_dir := Some (make_absolute s)),
-    "repository path");
-   ("-d", Arg.Unit (fun () -> fuse_opts := "-d" :: !fuse_opts),
-    "debug output (implies -f)");
-   ("-f", Arg.Unit (fun () -> fuse_opts := "-f" :: !fuse_opts),
-    "foreground operation");
-   ("-s", Arg.Unit (fun () -> fuse_opts := "-s" :: !fuse_opts),
-    "disable-multithreaded operation");
-   ("-o", Arg.String (fun s ->
-     fuse_opts := Printf.sprintf "-o %s" s :: !fuse_opts),
-    "Fuse options.")]
-
-let argrest s =
-  fuse_opts := s :: !fuse_opts
-
-let argusage = "usage: figfs [options] mountpoint"
-
-let check_figfs_dir () =
-  let figfs_dir = Filename.concat (get_repo_dir ()) "figfs" in
-  if Sys.file_exists figfs_dir then (
-    if Sys.is_directory figfs_dir then ((* good *))
-    else failwith "Repository contains figfs, but it isn't a directory."
-  ) else mkdir figfs_dir 0o755
-
 let main (argv:string array) =
-  let current = ref 0 in
-  try (
-    Arg.parse_argv ~current argv argspec argrest argusage;
+  let repo_dir = ref (find_repo ()) in
+  let fuse_opts = ref [] in
+  let argspec =
+    [("-r", Arg.String (fun s -> repo_dir := Some (make_absolute s)),
+      "repository path");
+     ("-d", Arg.Unit (fun () -> fuse_opts := "-d" :: !fuse_opts),
+      "debug output (implies -f)");
+     ("-f", Arg.Unit (fun () -> fuse_opts := "-f" :: !fuse_opts),
+      "foreground operation");
+     ("-s", Arg.Unit (fun () -> fuse_opts := "-s" :: !fuse_opts),
+      "disable-multithreaded operation");
+     ("-o", Arg.String (fun s ->
+       fuse_opts := Printf.sprintf "-o %s" s :: !fuse_opts),
+      "Fuse options.")] in
+  let argrest s = fuse_opts := s :: !fuse_opts in
+  let argusage = "usage: figfs [options] mountpoint" in
+  let check_figfs_dir () =
+    let figfs_dir = Filename.concat (get_repo_dir ()) "figfs" in
+    if Sys.file_exists figfs_dir then (
+      if Sys.is_directory figfs_dir then ((* good *))
+      else failwith "Repository contains figfs, but it isn't a directory."
+    ) else mkdir figfs_dir 0o755 in
+  let init () =
     match !repo_dir with
     | Some dir -> (
         set_repo_dir dir;
         check_figfs_dir ();
-        Workspace.init ();
-        let args = Array.of_list ("figfs" :: List.rev !fuse_opts) in
-        Fuse.main args operations
-      )
-    | None -> failwith "No repository found."
+        Workspace.init ()
+       )
+    | None -> failwith "No repository found." in
+  let current = ref 0 in
+  try (
+    Arg.parse_argv ~current argv argspec argrest argusage;
+    init ();
+    let args = Array.of_list ("figfs" :: List.rev !fuse_opts) in
+    Fuse.main args operations
   ) with
   | Failure s -> Printf.eprintf "%s\n" s
   | Sys_error s -> Printf.eprintf "%s\n" s

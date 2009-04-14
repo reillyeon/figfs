@@ -43,7 +43,7 @@ let create_workspace () : unit =
   else (
     check_figfs ();
     let ctrl = open_out ".figfs_ctrl" in
-    Printf.fprintf ctrl "create workspace %s %s\n" Sys.argv.(2) Sys.argv.(3);
+    Printf.fprintf ctrl "create workspace %s %s" Sys.argv.(2) Sys.argv.(3);
     close_out ctrl
   )
 
@@ -53,7 +53,7 @@ let destroy_workspace () : unit =
   else (
     check_figfs ();
     let ctrl = open_out ".figfs_ctrl" in
-    Printf.fprintf ctrl "destroy workspace %s\n" Sys.argv.(2);
+    Printf.fprintf ctrl "destroy workspace %s" Sys.argv.(2);
     close_out ctrl
   )
 
