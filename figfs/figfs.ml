@@ -371,11 +371,63 @@ let figfs_rmdir (path:string) : unit =
   else
     raise (Unix.Unix_error (Unix.EROFS, "rmdir", path))
 
+let ws_symlink (path:string) (target:string) : unit =
+  let workspace, rest = split_root_path path in
+  try (
+    let base = Workspace.base workspace in
+    match Workspace.stat_file workspace rest with
+    | Workspace.Mode.File
+    | Workspace.Mode.Directory _ ->
+        raise (Unix.Unix_error (Unix.EEXIST, "symlink", path))
+    | Workspace.Mode.Whiteout ->
+        Workspace.create_symlink workspace rest target
+    | Workspace.Mode.Unknown ->
+        try (
+          ignore (traverse_tree base rest);
+          raise (Unix.Unix_error (Unix.EEXIST, "symlink", path))
+        ) with Not_found -> Workspace.create_symlink workspace rest target
+  ) with Not_found -> raise (Unix.Unix_error (Unix.ENOENT, "mknod", path))
+
 let figfs_symlink (path:string) (target:string) : unit =
-  raise (Unix.Unix_error (Unix.ENOSYS, "symlink", path))
+  if starts_with "/workspace/" path && String.length path > 11 then
+    ws_symlink path target
+  else
+    raise (Unix.Unix_error (Unix.EROFS, "symlink", path))
+
+let ws_rename (path:string) (target:string) : unit =
+  let workspace, rest = split_root_path path in
+  try (
+    let base = Workspace.base workspace in
+    let target_workspace, target_rest = split_root_path path in
+    if not (starts_with "/workspace/" target && String.length target > 11) ||
+       workspace <> target_workspace
+    then raise (Unix.Unix_error (Unix.EXDEV, "rename", path))
+    else (
+      match Workspace.stat_file workspace rest with
+      | Workspace.Mode.File -> (
+          Workspace.rename_file workspace rest target_rest;
+          try (
+            ignore (traverse_tree base rest);
+            Workspace.whiteout_file workspace rest
+           ) with Not_found -> ()
+        )
+      | Workspace.Mode.Directory _ ->
+          raise (Unix.Unix_error (Unix.EISDIR, "rename", path))
+      | Workspace.Mode.Whiteout -> raise Not_found
+      | Workspace.Mode.Unknown ->
+          match traverse_tree base rest with
+          | Blob b ->
+              Workspace.whiteout_file workspace rest;
+              Workspace.create_file workspace target_rest b.b_data 0o644
+          | _ -> raise (Unix.Unix_error (Unix.EISDIR, "rename", path))
+    )
+  ) with Not_found -> raise (Unix.Unix_error (Unix.ENOENT, "rename", path))
 
 let figfs_rename (path:string) (target:string) : unit =
-  raise (Unix.Unix_error (Unix.ENOSYS, "rename", path))
+  if starts_with "/workspace/" path && String.length path > 11 then
+    ws_rename path target
+  else
+    raise (Unix.Unix_error (Unix.EROFS, "rename", path))
 
 let figfs_link (path:string) (target:string) : unit =
   raise (Unix.Unix_error (Unix.ENOSYS, "link", path))
@@ -559,7 +611,8 @@ let ctrl_writer (commit:string) : Fuse.buffer -> int64 -> int =
 
 let ctrl_fopen (path:string) : int =
   let base =
-    if starts_with "/workspace/" path && String.length path > 11
+    if "/workspace/.figfs_ctrl" = path then ""
+    else if starts_with "/workspace/" path && String.length path > 11
     then (
       let workspace, rest = split_root_path path in
       try Workspace.base workspace

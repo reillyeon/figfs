@@ -19,7 +19,7 @@
 module Mode : sig
   type t =
     | File
-    | Directory of int
+    | Directory of int64
     | Whiteout
     | Unknown
 
@@ -38,9 +38,13 @@ val file_path : string -> string -> string
 
 val stat_file : string -> string -> Mode.t
 
-val list_dir : int -> string list -> string list
+val list_dir : int64 -> string list -> string list
 
 val create_file : string -> string -> string -> int -> unit
+
+val create_symlink : string -> string -> string -> unit
+
+val rename_file : string -> string -> string -> unit
 
 val delete_file : string -> string -> unit
 

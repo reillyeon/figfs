@@ -22,14 +22,14 @@ open Util
 module Mode = struct
   type t =
     | File
-    | Directory of int
+    | Directory of int64
     | Whiteout
     | Unknown
 
   let to_string t : string =
     match t with
     | File -> "File"
-    | Directory i -> Printf.sprintf "Directory %d" i
+    | Directory i -> Printf.sprintf "Directory %Ld" i
     | Whiteout -> "Whiteout"
     | Unknown -> "Unknown"
 end
@@ -74,6 +74,7 @@ let statFileQueryHandle         : Sqlite3.stmt option ref = ref None
 let statWorkspaceQueryHandle    : Sqlite3.stmt option ref = ref None
 let listDirQueryHandle          : Sqlite3.stmt option ref = ref None
 let addFileQueryHandle          : Sqlite3.stmt option ref = ref None
+let renameFileQueryHandle       : Sqlite3.stmt option ref = ref None
 let deleteFileQueryHandle       : Sqlite3.stmt option ref = ref None
 let clearWhiteoutQueryHandle    : Sqlite3.stmt option ref = ref None
 
@@ -95,6 +96,8 @@ let listDirQuery = prepareQuery listDirQueryHandle
     "SELECT name, whiteout FROM file WHERE parent = ?"
 let addFileQuery = prepareQuery addFileQueryHandle
     "INSERT INTO file (workspace, path, name, parent, directory, whiteout) VALUES (?, ?, ?, ?, ?, ?)"
+let renameFileQuery = prepareQuery renameFileQueryHandle
+    "UPDATE file SET path = ?, name = ?, parent = ? WHERE workspace = ? AND path = ?"
 let deleteFileQuery = prepareQuery deleteFileQueryHandle
     "DELETE FROM file WHERE workspace = ? AND path = ? AND whiteout = 0"
 let clearWhiteoutQuery = prepareQuery clearWhiteoutQueryHandle
@@ -172,7 +175,7 @@ let stat_file (workspace:string) (path:string) : Mode.t =
       then (
         let id =
           match Sqlite3.column stmt 0 with
-          | Sqlite3.Data.INT i -> Int64.to_int i
+          | Sqlite3.Data.INT i -> i
           | _ -> failwith "Expect int for file id." in
         let directory = Sqlite3.column stmt 1 in
         let whiteout = Sqlite3.column stmt 2 in
@@ -184,9 +187,9 @@ let stat_file (workspace:string) (path:string) : Mode.t =
     in ignore (Sqlite3.reset stmt); result
   ) else failwith (Printf.sprintf "sqlite: %s" (Sqlite3.errmsg (db ())))
 
-let list_dir (id:int) (base:string list): string list =
+let list_dir (id:int64) (base:string list): string list =
   let stmt = listDirQuery () in
-  if Sqlite3.bind stmt 1 (Sqlite3.Data.INT (Int64.of_int id)) = Sqlite3.Rc.OK
+  if Sqlite3.bind stmt 1 (Sqlite3.Data.INT id) = Sqlite3.Rc.OK
   then (
     let rec loop accum =
       if Sqlite3.step stmt = Sqlite3.Rc.ROW
@@ -202,9 +205,8 @@ let list_dir (id:int) (base:string list): string list =
     listing
   ) else failwith (Printf.sprintf "sqlite: %s" (Sqlite3.errmsg (db ())))
 
-let add_db_file (workspace:string) (parent:int) (path:string) (dir:bool)
-    (whiteout:bool) : int =
-  let parent = Int64.of_int parent in
+let add_db_file (workspace:string) (parent:int64) (path:string) (dir:bool)
+    (whiteout:bool) : int64 =
   let dir = if dir then 1L else 0L in
   let whiteout = if whiteout then 1L else 0L in
   let name = Filename.basename path in
@@ -218,7 +220,7 @@ let add_db_file (workspace:string) (parent:int) (path:string) (dir:bool)
      Sqlite3.step stmt = Sqlite3.Rc.DONE
   then ignore (Sqlite3.reset stmt)
   else failwith (Printf.sprintf "sqlite: %s" (Sqlite3.errmsg (db ())));
-  Int64.to_int (Sqlite3.last_insert_rowid (db ()))
+  Sqlite3.last_insert_rowid (db ())
 
 let delete_db_file (workspace:string) (path:string) : unit =
   let stmt = deleteFileQuery () in
@@ -237,8 +239,8 @@ let rec create_path (path:string) (names:string list) : unit =
         create_path new_path (h2 :: rest)
     | _ -> ()
 
-let rec create_db_path (workspace:string) (parent:int) (path:string)
-    (names:string list) : int =
+let rec create_db_path (workspace:string) (parent:int64) (path:string)
+    (names:string list) : int64 =
   match names with
   | h1 :: h2 :: rest -> (
       let new_path = Filename.concat path h1 in
@@ -279,6 +281,39 @@ let create_file (workspace:string) (path:string) (data:string) (mode:int)
     | _ -> failwith "Something is wrong, root directory isn't a directory." in
   let dir = create_db_path workspace root "/" path_elems in
   ignore (add_db_file workspace dir path false false)
+
+let create_symlink (workspace:string) (path:string) (target:string) : unit =
+    clear_whiteout workspace path;
+  let path_elems = split path '/' in
+  create_path (file_dir workspace) path_elems;
+  Unix.symlink (file_path workspace path) target;
+  let root =
+    match stat_file workspace "/" with
+    | Mode.Directory id -> id
+    | _ -> failwith "Something is wrong, root directory isn't a directory." in
+  let dir = create_db_path workspace root "/" path_elems in
+  ignore (add_db_file workspace dir path false false)
+
+let rename_file (workspace:string) (path:string) (target:string) : unit =
+  let target_elems = split target '/' in
+  create_path (file_dir workspace) target_elems;
+  Unix.rename (file_path workspace path) (file_path workspace target);
+  clear_whiteout workspace target;
+  let root =
+    match stat_file workspace "/" with
+    | Mode.Directory id -> id
+    | _ -> failwith "Something is wrong, root directory isn't a directory." in
+  let dir = create_db_path workspace root "/" target_elems in
+  let name = Filename.basename target in
+  let stmt = renameFileQuery () in
+  if Sqlite3.bind stmt 1 (Sqlite3.Data.TEXT target) = Sqlite3.Rc.OK &&
+     Sqlite3.bind stmt 2 (Sqlite3.Data.TEXT name) = Sqlite3.Rc.OK &&
+     Sqlite3.bind stmt 3 (Sqlite3.Data.INT dir) = Sqlite3.Rc.OK &&
+     Sqlite3.bind stmt 4 (Sqlite3.Data.TEXT workspace) = Sqlite3.Rc.OK &&
+     Sqlite3.bind stmt 5 (Sqlite3.Data.TEXT path) = Sqlite3.Rc.OK &&
+     Sqlite3.step stmt = Sqlite3.Rc.DONE
+  then ignore (Sqlite3.reset stmt)
+  else failwith (Printf.sprintf "sqlite: %s" (Sqlite3.errmsg (db ())))
 
 let delete_file (workspace:string) (path:string) : unit =
   Unix.unlink (file_path workspace path);

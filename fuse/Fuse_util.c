@@ -207,7 +207,7 @@ int * invert_array(int * src,int * indim,int * outdim)
 
   while (src[srcdim]!=0) 
     {
-      if (src[srcdim]>dim) dim=src[srcdim]; 
+      if (src[srcdim]>=dim) dim=src[srcdim]+1;
       srcdim++;
     }
   
