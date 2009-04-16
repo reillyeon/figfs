@@ -286,7 +286,7 @@ let create_symlink (workspace:string) (path:string) (target:string) : unit =
     clear_whiteout workspace path;
   let path_elems = split path '/' in
   create_path (file_dir workspace) path_elems;
-  Unix.symlink (file_path workspace path) target;
+  Unix.symlink target (file_path workspace path);
   let root =
     match stat_file workspace "/" with
     | Mode.Directory id -> id

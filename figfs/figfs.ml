@@ -195,6 +195,8 @@ let figfs_readlink (path:string) : string =
     ref_readlink "refs/tags" path
   else if starts_with "/branch/" path && String.length path > 8 then
     ref_readlink "refs/heads" path
+  else if starts_with "/workspace/" path && String.length path > 11 then
+    ws_readlink path
   else
     raise (Unix.Unix_error (Unix.ENOENT, "readlink", path))
 
@@ -386,9 +388,9 @@ let ws_symlink (path:string) (target:string) : unit =
           ignore (traverse_tree base rest);
           raise (Unix.Unix_error (Unix.EEXIST, "symlink", path))
         ) with Not_found -> Workspace.create_symlink workspace rest target
-  ) with Not_found -> raise (Unix.Unix_error (Unix.ENOENT, "mknod", path))
+  ) with Not_found -> raise (Unix.Unix_error (Unix.ENOENT, "symlink", path))
 
-let figfs_symlink (path:string) (target:string) : unit =
+let figfs_symlink (target:string) (path:string) : unit =
   if starts_with "/workspace/" path && String.length path > 11 then
     ws_symlink path target
   else
@@ -398,7 +400,7 @@ let ws_rename (path:string) (target:string) : unit =
   let workspace, rest = split_root_path path in
   try (
     let base = Workspace.base workspace in
-    let target_workspace, target_rest = split_root_path path in
+    let target_workspace, target_rest = split_root_path target in
     if not (starts_with "/workspace/" target && String.length target > 11) ||
        workspace <> target_workspace
     then raise (Unix.Unix_error (Unix.EXDEV, "rename", path))
