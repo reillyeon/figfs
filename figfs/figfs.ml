@@ -771,8 +771,6 @@ let main (argv:string array) =
       "debug output (implies -f)");
      ("-f", Arg.Unit (fun () -> fuse_opts := "-f" :: !fuse_opts),
       "foreground operation");
-     ("-s", Arg.Unit (fun () -> fuse_opts := "-s" :: !fuse_opts),
-      "disable-multithreaded operation");
      ("-o", Arg.String (fun s ->
        fuse_opts := Printf.sprintf "-o %s" s :: !fuse_opts),
       "Fuse options.")] in
@@ -796,7 +794,8 @@ let main (argv:string array) =
   try (
     Arg.parse_argv ~current argv argspec argrest argusage;
     init ();
-    let args = Array.of_list ("figfs" :: List.rev !fuse_opts) in
+    (* Force "-s" for single threaded operation because it's faster. *)
+    let args = Array.of_list ("figfs" :: "-s" :: List.rev !fuse_opts) in
     Fuse.main args operations
   ) with
   | Failure s -> Printf.eprintf "%s\n" s
