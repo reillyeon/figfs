@@ -17,9 +17,12 @@
  *)
 
 type cmd =
-  | CreateWorkspace of string * string
+  | CreateWorkspaceHash of string * string
+  | CreateWorkspaceRef of string * string
   | DestroyWorkspace of string
 
-val string_of_cmd : cmd -> string
+val to_string : cmd -> string
 
-val cmd_of_string : string -> cmd option
+val of_string : string -> cmd option
+
+type t = cmd

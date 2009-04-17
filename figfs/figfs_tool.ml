@@ -16,15 +16,17 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  *)
 
+open Util
+
 let usage () : unit =
   let msg = String.concat "\n" [
     "Usage: figfs command [args]";
     "";
     "Commands:";
-    "  help                         Display this message.";
-    "  mount [options] <mountpoint> Mount figfs.";
-    "  create <workspace> <commit>  Create a new workspace.";
-    "  destroy <workspace>          Destroy a workspace.";
+    "  help                                   Display this message.";
+    "  mount [options] <mountpoint>           Mount figfs.";
+    "  create <workspace> [<ref> | <commit>]  Create a new workspace.";
+    "  destroy <workspace>                    Destroy a workspace.";
     ""] in
   Printf.eprintf "%s\n" msg
 
@@ -39,11 +41,21 @@ let mount () : unit =
 
 let create_workspace () : unit =
   if Array.length Sys.argv != 4
-  then failwith "Usage: figfs create <workspace>"
+  then failwith "Usage: figfs create <workspace> [<ref> | <commit>]"
   else (
     check_figfs ();
+    let workspace = Sys.argv.(2) in
+    let target = Sys.argv.(3) in
+    let cmd = (
+      if starts_with "refs/" target then
+        Command.CreateWorkspaceRef (workspace, target)
+      else if String.length target = 40 then
+        Command.CreateWorkspaceHash (workspace, target)
+      else
+        failwith "Invalid commit: Not a ref or object hash."
+    ) in
     let ctrl = open_out ".figfs_ctrl" in
-    Printf.fprintf ctrl "create workspace %s %s" Sys.argv.(2) Sys.argv.(3);
+    output_string ctrl (Command.to_string cmd);
     close_out ctrl
   )
 
@@ -52,8 +64,10 @@ let destroy_workspace () : unit =
   then failwith "Usage: figfs destroy <workspace>"
   else (
     check_figfs ();
+    let workspace = Sys.argv.(2) in
+    let cmd = Command.DestroyWorkspace workspace in
     let ctrl = open_out ".figfs_ctrl" in
-    Printf.fprintf ctrl "destroy workspace %s" Sys.argv.(2);
+    output_string ctrl (Command.to_string cmd);
     close_out ctrl
   )
 
@@ -66,4 +80,6 @@ let _ =
     | "create"  -> create_workspace ()
     | "destroy" -> destroy_workspace ()
     | s         -> Printf.eprintf "Unknown command '%s'.\n\n" s; usage ()
-  ) with Failure s -> Printf.eprintf "%s\n" s
+  ) with
+  | Failure s -> Printf.eprintf "%s\n" s
+  | Sys_error s -> Printf.eprintf "%s\n" s

@@ -601,11 +601,20 @@ let ctrl_writer (commit:string) : Fuse.buffer -> int64 -> int =
     if off <> 0L
     then raise (Unix.Unix_error (Unix.EINVAL, "write", ""))
     else (
-      match Command.cmd_of_string str with
+      match Command.of_string str with
       | Some cmd -> (
         match cmd with
-        | Command.CreateWorkspace (name, base) -> Workspace.create name base
-        | Command.DestroyWorkspace name -> Workspace.destroy name
+        | Command.CreateWorkspaceHash (name, base) ->
+            Workspace.create name base
+        | Command.CreateWorkspaceRef (name, ref) -> (
+            try (
+              let r = Refs.lookup ref in
+              Workspace.create name r.r_target
+            ) with Not_found ->
+              raise (Unix.Unix_error (Unix.EINVAL, "write", ""))
+          )
+        | Command.DestroyWorkspace name ->
+            Workspace.destroy name
       )
       | None -> raise (Unix.Unix_error (Unix.EINVAL, "write", ""))
     );

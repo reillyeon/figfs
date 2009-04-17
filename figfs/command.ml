@@ -19,22 +19,30 @@
 open Util
 
 type cmd =
-  | CreateWorkspace of string * string
+  | CreateWorkspaceHash of string * string
+  | CreateWorkspaceRef of string * string
   | DestroyWorkspace of string
 
-let string_of_cmd (cmd:cmd) : string =
+let to_string (cmd:cmd) : string =
   match cmd with
-  | CreateWorkspace (w, h) -> Printf.sprintf "create workspace %s %s" w h
-  | DestroyWorkspace w -> Printf.sprintf "destroy workspace %s" w
+  | CreateWorkspaceHash (w, h) ->
+      Printf.sprintf "create workspace %s %s" w h
+  | CreateWorkspaceRef (w, r) ->
+      Printf.sprintf "create workspace %s ref: %s" w r
+  | DestroyWorkspace w ->
+      Printf.sprintf "destroy workspace %s" w
 
-let cmd_of_string (cmd:string) : cmd option =
+let of_string (cmd:string) : cmd option =
   let words = unwords cmd in
   match words with
   | ["create"; "workspace"; name; hash] ->
       if String.length hash = 40
-      then Some (CreateWorkspace (name, hash))
+      then Some (CreateWorkspaceHash (name, hash))
       else None
+  | ["create"; "workspace"; name; "ref:"; ref] ->
+      Some (CreateWorkspaceRef (name, ref))
   | ["destroy"; "workspace"; name] ->
-    Some (DestroyWorkspace name)
+      Some (DestroyWorkspace name)
   | _ -> None
 
+type t = cmd
