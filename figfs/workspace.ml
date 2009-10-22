@@ -104,6 +104,11 @@ let clearWhiteoutQuery = prepareQuery clearWhiteoutQueryHandle
     "DELETE FROM file WHERE workspace = ? AND path = ? AND whiteout = 1"
 
 let init () : unit =
+  let figfs_dir = Filename.concat (get_repo_dir ()) "figfs" in
+  if Sys.file_exists figfs_dir then (
+    if Sys.is_directory figfs_dir then ((* good *))
+    else failwith "Repository contains figfs, but it isn't a directory."
+  ) else Unix.mkdir figfs_dir 0o755;
   let db = db () in
   if Sqlite3.exec db
       "CREATE TABLE IF NOT EXISTS workspace (name STRING PRIMARY KEY, base CHAR(40))"

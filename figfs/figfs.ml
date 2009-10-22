@@ -787,17 +787,10 @@ let main (argv:string array) =
       "Fuse options.")] in
   let argrest s = fuse_opts := s :: !fuse_opts in
   let argusage = "usage: figfs [options] mountpoint" in
-  let check_figfs_dir () =
-    let figfs_dir = Filename.concat (get_repo_dir ()) "figfs" in
-    if Sys.file_exists figfs_dir then (
-      if Sys.is_directory figfs_dir then ((* good *))
-      else failwith "Repository contains figfs, but it isn't a directory."
-    ) else mkdir figfs_dir 0o755 in
   let init () =
     match !repo_dir with
     | Some dir -> (
         set_repo_dir dir;
-        check_figfs_dir ();
         Workspace.init ()
        )
     | None -> failwith "No repository found." in
