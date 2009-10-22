@@ -1,6 +1,8 @@
 *~
 *.[ao]
 *.l[ao]
+*.so
+.depend
 
 # Files related to O'Caml projects.
 *.cm[ioxa]

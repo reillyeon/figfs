@@ -1,4 +1,4 @@
-# Copyright (C) 2008 Reilly Grant
+# Copyright (C) 2009 Reilly Grant
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -14,6 +14,18 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
-.PHONY: all clean test
+all:
+	(cd fuse; make all)
+	(cd git; make all)
+	(cd figfs; make all)
 
-.SUBDIRS: fuse git figfs
+.PHONY: test clean
+
+test: all
+	(cd git; make test)
+	(cd figfs; make test)
+
+clean:
+	(cd fuse; make clean)
+	(cd git; make clean)
+	(cd figfs; make clean)
