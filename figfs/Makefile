@@ -49,6 +49,14 @@ figfs_test.opt: $(OCAML_NATIVE_OBJECTS) figfs_test.cmx
 
 .PHONY: test clean
 
+test:
+ifdef BYTE_ENABLED
+	./figfs_test
+endif
+ifdef NATIVE_ENABLED
+	./figfs_test.opt
+endif
+
 clean:
 	rm -f .depend
 	rm -f $(OCAML_BYTE_INTERFACES)
