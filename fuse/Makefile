@@ -17,11 +17,9 @@
 include ../common-defs.mk
 
 all: $(if $(BYTE_ENABLED), fuse.cma) \
-     $(if $(NATIVE_ENABLED), fuse.cmxa) \
-     $(if $(BYTE_ENABLED), fusexmp) \
-     $(if $(NATIVE_ENABLED), fusexmp.opt)
+     $(if $(NATIVE_ENABLED), fuse.cmxa)
 
-CFLAGS = -fPIC -D_FILE_OFFSET_BITS=64 -pthread -I. -DPIC -DNATIVE_CODE -g
+CFLAGS = -fPIC -D_FILE_OFFSET_BITS=64 -pthread -I. -DPIC -DNATIVE_CODE -g -I/opt/local/lib/ocaml/
 OCAMLFLAGS = -thread -package unix,threads,bigarray -warn-error -A -g -I .
 
 GENERATED_FILES = Fuse_bindings_stubs.c \
@@ -64,26 +62,20 @@ fuse.cmxa fuse.a: $(OCAML_NATIVE_OBJECTS) libfusestub.a
 fuse.cma: $(OCAML_BYTE_OBJECTS) libfusestub.a dllfuse.so
 	$(OCAMLC) $(OCAMLFLAGS) -custom -a -dllib dllfuse.so -linkall bigarray.cma -cclib -lfusestub -cclib -lfuse -cclib -lcamlidl -o $@ $(OCAML_BYTE_OBJECTS)
 
-fusexmp: fuse.cma fusexmp.cmo
-	$(OCAMLC) $(OCAMLFLAGS) -custom -linkpkg -o $@ $^
-
-fusexmp.opt: fuse.cmxa fusexmp.cmx
-	$(OCAMLOPT) $(OCAMLFLAGS) -linkpkg -o $@ $^
 
 .PHONY: clean
 
 clean:
 	rm .depend
 	rm -f $(GENERATED_FILES)
-	rm -f $(OCAML_BYTE_INTERFACES) fusexmp.cmi
+	rm -f $(OCAML_BYTE_INTERFACES)
+	rm -f Fuse_lib.cmi  Result.cmi    Unix_util.cmi
 ifdef BYTE_ENABLED
-	rm -f fuse.cma libfusestub.a
-	rm -f fusexmp fusexmp.cmo
+	rm -f fuse.cma libfusestub.a dllfuse.so
 	rm -f $(OCAML_BYTE_OBJECTS)
 endif
 ifdef NATIVE_ENABLED
 	rm -f fuse.cmxa fuse.a libfusestub.a dllfuse.so
-	rm -f fusexmp.opt fusexmp.cmx fusexmp.o
 	rm -f $(OCAML_CODE_OBJECTS) $(OCAML_NATIVE_OBJECTS)
 endif
 	rm -f $(C_OBJECTS)
