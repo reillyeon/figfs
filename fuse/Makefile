@@ -19,7 +19,7 @@ include ../common-defs.mk
 all: $(if $(BYTE_ENABLED), fuse.cma) \
      $(if $(NATIVE_ENABLED), fuse.cmxa)
 
-CFLAGS = -fPIC -D_FILE_OFFSET_BITS=64 -pthread -I. -DPIC -DNATIVE_CODE -g -I/opt/local/lib/ocaml/
+CFLAGS = -fPIC -D_FILE_OFFSET_BITS=64 -pthread -I. -DPIC -DNATIVE_CODE -g -I/opt/local/lib/ocaml/ -D__FreeBSD__=10
 OCAMLFLAGS = -thread -package unix,threads,bigarray -warn-error -A -g -I .
 
 GENERATED_FILES = Fuse_bindings_stubs.c \
@@ -54,7 +54,7 @@ libfusestub.a: $(C_OBJECTS)
 	ar rcs $@ $^
 
 dllfuse.so: $(C_OBJECTS)
-	gcc -o $@ -shared $(C_OBJECTS) -lfuse
+	gcc -o $@ -shared -Wl,-undefined,dynamic_lookup $(C_OBJECTS) -lfuse -lfuse -pthread  -liconv
 
 fuse.cmxa fuse.a: $(OCAML_NATIVE_OBJECTS) libfusestub.a
 	$(OCAMLOPT) $(OCAMLFLAGS) -a -linkall -cclib -lfusestub -cclib -lfuse  -cclib -lcamlidl -o $@ $(OCAML_NATIVE_OBJECTS)

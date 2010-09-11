@@ -27,7 +27,6 @@
 #include <stddef.h>
 #include <string.h>
 #include <errno.h>
-#include <sys/vfs.h>
 #include <sys/statvfs.h>
 
 #include <caml/mlvalues.h>
