@@ -33,6 +33,7 @@ quote(mlmli,"type fuse_cmd")
 typedef [string] char * str;
 
 struct fuse_operation_names {
+  [string,unique] char * init;
   [string,unique] char * getattr;
   [string,unique] char * readlink;
   [string,unique] char * readdir;

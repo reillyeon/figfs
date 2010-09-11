@@ -37,7 +37,7 @@ let undefined _ = raise (Unix.Unix_error (Unix.ENOSYS,"undefined",""))
 
 let fuse_loop fuse (multithreaded) = 
    let f = 
-    if multithreaded 
+    if multithreaded (* TODO: thread pooling instead of creation? *)
     then fun x y -> ignore (Thread.create x y) 
     else fun x y -> ignore (x y)
   in
@@ -50,6 +50,7 @@ let fuse_loop fuse (multithreaded) =
 let _ = Callback.register "ocaml_fuse_loop" fuse_loop
 
 let default_op_names = {
+  init = None;
   getattr = None;
   readlink = None;
   readdir = None;
