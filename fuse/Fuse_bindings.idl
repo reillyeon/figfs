@@ -24,6 +24,7 @@
   vincenzo_ml@yahoo.it
 */
 
+quote(h,"#define FUSE_USE_VERSION 26")
 quote(h,"#include <fuse.h>") 
 
 typedef [abstract] void * fuse;
