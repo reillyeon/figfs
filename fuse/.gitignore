@@ -1,0 +1,4 @@
+fuse/Fuse_bindings.h
+fuse/Fuse_bindings.ml
+fuse/Fuse_bindings.mli
+fuse/Fuse_bindings_stubs.c
