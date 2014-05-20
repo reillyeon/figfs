@@ -28,22 +28,10 @@ type buffer = (char, Bigarray.int8_unsigned_elt, Bigarray.c_layout) Bigarray.Arr
 type context = Fuse_bindings.__fuse_context
 val get_context : unit -> context
 type xattr_flags = AUTO | CREATE | REPLACE
-type statfs = {
-  f_bsize : int64;
-  f_blocks : int64;
-  f_bfree : int64;
-  f_bavail : int64;
-  f_files : int64;
-  f_ffree : int64;
-  f_namelen : int64;
-}
+
 type operations = {
   getattr : string -> Unix.LargeFile.stats;
   readlink : string -> string;
-  readdir : string -> int -> string list;
-  opendir : string -> Unix.open_flag list -> int option;
-  releasedir : string -> Unix.open_flag list -> int -> unit;
-  fsyncdir : string -> bool -> int -> unit; 
   mknod : string -> int -> unit;
   mkdir : string -> int -> unit;
   unlink : string -> unit;
@@ -58,14 +46,24 @@ type operations = {
   fopen : string -> Unix.open_flag list -> int option;
   read : string -> buffer -> int64 -> int -> int;
   write : string -> buffer -> int64 -> int -> int;
-  release : string -> Unix.open_flag list -> int -> unit;
+  statfs : string -> Unix_util.statvfs;
   flush : string -> int -> unit;
-  statfs : string -> statfs;
+  release : string -> Unix.open_flag list -> int -> unit;
   fsync : string -> bool -> int -> unit;
-  listxattr : string -> string list;
-  getxattr : string -> string -> string;
   setxattr : string -> string -> string -> xattr_flags -> unit;
+  getxattr : string -> string -> string;
+  listxattr : string -> string list;
   removexattr : string -> string -> unit;
+  opendir : string -> Unix.open_flag list -> int option;
+  readdir : string -> int -> string list;
+  releasedir : string -> Unix.open_flag list -> int -> unit;
+  fsyncdir : string -> bool -> int -> unit;
+  init : unit -> unit;
+
+(* TODO: missing callbacks:
+
+   destroy, access, create, ftruncate, fgetattr, lock, utimens, 
+   bmap, flag_nullpath_ok, ioctl, poll *)
 }
 val op_names_of_operations : operations -> Fuse_bindings.fuse_operation_names
 val default_operations : operations
