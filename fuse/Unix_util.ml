@@ -32,6 +32,38 @@ external write_noexn : Unix.file_descr -> (char, Bigarray.int8_unsigned_elt, Big
 external int_of_file_descr : Unix.file_descr -> int = "unix_util_int_of_file_descr"
 external file_descr_of_int : int -> Unix.file_descr = "unix_util_file_descr_of_int"
 
+(* Statvfs code inspired by statfs code by Richard Jones and Damien Doligez, see:
+
+   http://caml.inria.fr/pub/ml-archives/caml-list/2005/07/bb434b103b1cdbbec3c832d9a72af9a3.fr.html
+
+   http://caml.inria.fr/pub/ml-archives/caml-list/2005/07/49ee60ceadbcbbc84b0bce54ad5949b6.fr.html
+   
+   TODO: learn about caml_failwith (see their code)
+*)
+
+type statvfs = {
+  f_bsize : int64;
+  f_frsize : int64;
+  f_blocks : int64;
+  f_bfree : int64;
+  f_bavail : int64;
+  f_files : int64;
+  f_ffree : int64;
+  f_favail : int64;
+  f_fsid : int64;
+  f_flag : int64;
+  f_namemax : int64;
+}
+
+external statvfs_noexn : string -> statvfs result = "unix_util_statvfs"
+
+let statvfs path = 
+  match statvfs_noexn path with
+      Ok res ->  res
+    | Bad err -> raise (Unix.Unix_error (err,"statvfs",""))
+
+external fchdir : Unix.file_descr -> unit = "unix_util_fchdir"
+
 let read fd buf =
   match read_noexn fd buf with
       Ok res -> res

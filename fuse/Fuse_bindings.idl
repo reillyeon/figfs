@@ -24,6 +24,7 @@
   vincenzo_ml@yahoo.it
 */
 
+quote(h,"#define FUSE_USE_VERSION 26")
 quote(h,"#include <fuse.h>") 
 
 typedef [abstract] void * fuse;
@@ -33,6 +34,7 @@ quote(mlmli,"type fuse_cmd")
 typedef [string] char * str;
 
 struct fuse_operation_names {
+  [string,unique] char * init;
   [string,unique] char * getattr;
   [string,unique] char * readlink;
   [string,unique] char * readdir;
